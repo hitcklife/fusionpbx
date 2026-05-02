@@ -292,6 +292,7 @@
 					sip_profile_setting_value = string.gsub(sip_profile_setting_value, "{strftime", "${strftime");
 					sip_profile_setting_value = string.gsub(sip_profile_setting_value, "{uuid}", "${uuid}");
 					sip_profile_setting_value = string.gsub(sip_profile_setting_value, "{record_ext}", "${record_ext}");
+					sip_profile_setting_value = string.gsub(sip_profile_setting_value, "{sip_req_host}", "${sip_req_host}");
 
 				--set the parameters
 					if (sip_profile_setting_name) then
