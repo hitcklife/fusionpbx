@@ -82,21 +82,7 @@ class event_guard_service extends service {
 		$this->hostname = gethostname();
 
 		// Connect to event socket
-		$this->socket = new event_socket;
-		if ($this->socket->connect()) {
-			// Loop through the switch events
-			$cmd = "event json ALL";
-			$result = $this->socket->request($cmd);
-			$this->debug('subscribe to ALL events '. print_r($result, true));
-
-			// Filter for specific events
-			$cmd = "filter Event-Name CUSTOM";
-			$result = $this->socket->request($cmd);
-			$this->debug('subscribe to CUSTOM events '. print_r($result, true));
-		}
-		else {
-			$this->warning('Unable to connect to event socket');
-		}
+		$this->socket = null;
 	}
 
 	public function run(): int {
@@ -122,34 +108,36 @@ class event_guard_service extends service {
 			}
 
 			// Reconnect to event socket
-			if (!$this->socket->connected()) {
-				$this->warning('Not connected to even socket');
-				if ($this->socket->connect()) {
+			while ($this->socket == null || !$this->socket->connected()) {
+				// Send a message to the log
+				$this->warning('Not connected to event socket');
+
+				// Create a new event socket object and then connect
+				$this->socket = new event_socket;
+				$this->socket->connect();
+
+				// Wait for the switch to connect
+				sleep(1);
+
+				// Check if connected
+				if ($this->socket->connected()) {
 					// Define the events
 					$switch_events = [
-						['Event-Subclass' => 'sofia::pre_register'],
-						['Event-Subclass' => 'sofia::register_failure'],
-						['Event-Subclass' => 'event_guard:unblock']
+						['category' => 'Event-Subclass', 'subcategory' => 'sofia::pre_register'],
+						['category' => 'Event-Subclass', 'subcategory' => 'sofia::register_failure'],
+						['category' => 'Event-Subclass', 'subcategory' => 'event_guard:unblock']
 					];
 
 					// Add the event filters
 					$cmd = "event json ALL";
 					$result = $this->socket->request($cmd);
 					$this->info('subscribe to ALL events '. print_r($result, true));
-					foreach($switch_events as $event_key => $event_value) {
-						$cmd = "filter ".$event_key." ".$event_value;
+					foreach($switch_events as $row) {
+						$cmd = "filter ".$row['category']." ".$row['subcategory'];
 						$result = $this->socket->request($cmd);
 						$this->info('subscribe to CUSTOM events '. print_r($result, true));
 					}
-					$this->info('Re-connected to event socket');
-				}
-				else {
-					// Unable to connect to event socket
-					$this->warning('Unable to connect to event socket');
-
-					// Sleep and then attempt to reconnect
-					sleep(1);
-					continue;
+					$this->notice('Re-connected to event socket');
 				}
 			}
 
@@ -187,10 +175,10 @@ class event_guard_service extends service {
 					$x = 0;
 					foreach($event_guard_logs as $row) {
 						//unblock the ip address
-						$this->block_delete($row['ip_address'], $row['filter']);
+						$this->block_delete($row['ip_address'], 'all');
 
 						//debug info
-						$this->info("unblocked: [ip_address: ".$row['ip_address'].", filter: ".$row['filter'].", to-user: ".$row['extension'].", to-host: ".$row['hostname'].", line: ".__line__);
+						$this->info("unblocked: [ip_address: ".$row['ip_address'].", filter: all, to-user: ".$row['extension'].", to-host: ".$row['hostname'].", line: ".__line__);
 
 						//log the blocked ip address to the database
 						$array['event_guard_logs'][$x]['event_guard_log_uuid'] = $row['event_guard_log_uuid'];
@@ -293,9 +281,6 @@ class event_guard_service extends service {
 			$p->add('event_guard_log_add', 'temp');
 			$this->database->save($array, false);
 			$p->delete('event_guard_log_add', 'temp');
-
-			//send debug information to the console
-			$this->info("blocked address " . $ip_address . ", line " . __line__);
 		}
 
 		//return the result
@@ -310,10 +295,9 @@ class event_guard_service extends service {
 
 		//unblock the IP address
 		$result = $this->firewall->block_delete($ip_address, $filter);
-		if ($result) {
-			//send debug information to the console
-			$this->info("Unblock address " . $ip_address . ", line " . __line__);
-		}
+
+		//send debug information to the console
+		$this->warning("unblocked: [ip_address: ".$ip_address.", filter: ".$filter.", line: ".__line__."]");
 
 		//return the result
 		return $result;

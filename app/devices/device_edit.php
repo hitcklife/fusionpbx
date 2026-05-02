@@ -36,12 +36,6 @@
 	$language = new text;
 	$text = $language->get();
 
-//get order and order by, page
-	$order_by = preg_replace('#[^a-zA-Z0-9_\-]#', '', ($_REQUEST["order_by"] ?? ''));
-	$order = $_REQUEST["order"] ?? 'asc';
-	$page = isset($_REQUEST['page']) && is_numeric($_REQUEST['page']) ? $_REQUEST['page'] : 0;
-	$search = $_REQUEST['search'] ?? null;
-
 //set the defaults
 	$device_model = '';
 	$device_firmware_version = '';
@@ -64,6 +58,36 @@
 		$device_uuid = uuid();
 	}
 
+// Set variables from http GET parameters
+	$page = is_numeric($_GET['page'] ?? '') ? $_GET['page'] : 0;
+	$order_by = preg_replace('#[^a-zA-Z0-9_\-]#', '', ($_GET['order_by'] ?? 'device_label'));
+	$order = ($_GET['order'] ?? '') === 'desc' ? 'desc' : 'asc';
+	$fields = $_GET['fields'] ?? '';
+	$search = $_GET['search'] ?? '';
+	$show = $_GET['show'] ?? '';
+
+// Build the query string
+	$url_params = [];
+	if (!empty($page)) {
+		$url_params['page'] = $page;
+	}
+	if (!empty($_GET['order_by'])) {
+		$url_params['order_by'] = $order_by;
+	}
+	if (!empty($_GET['order'])) {
+		$url_params['order'] = $order;
+	}
+	if (!empty($fields)) {
+		$url_params['fields'] = $fields;
+	}
+	if (!empty($search)) {
+		$url_params['search'] = $search;
+	}
+	if (!empty($show) && $show == 'all' && permission_exists('device_all')) {
+		$url_params['show'] = $show;
+	}
+	$query_string = http_build_query($url_params);
+
 //get the total device count from the database, check the limit, if defined
 	if ($action == 'add' && $settings->get('limit', 'devices', '') != '') {
 		$sql = "select count(*) from v_devices where domain_uuid = :domain_uuid ";
@@ -71,7 +95,7 @@
 		$total_devices = $database->select($sql, $parameters, 'column');
 		if ($total_devices >= $settings->get('limit', 'devices', '')) {
 			message::add($text['message-maximum_devices'].' '.$settings->get('limit', 'devices', ''), 'negative');
-			header('Location: devices.php?'.(!empty($order_by) ? '&order_by='.$order_by.'&order='.$order : null).(isset($page) && is_numeric($page) ? '&page='.$page : null).(!empty($search) ? '&search='.urlencode($search) : null));
+			header('Location: devices.php'.($query_string ? '?'.$query_string : ''));
 			exit;
 		}
 		unset($sql, $parameters, $total_devices);
@@ -94,7 +118,7 @@
 						break;
 				}
 
-				header('Location: devices.php?'.(!empty($order_by) ? '&order_by='.$order_by.'&order='.$order : null).(isset($page) && is_numeric($page) ? '&page='.$page : null).(!empty($search) ? '&search='.urlencode($search) : null));
+				header('Location: devices.php'.($query_string ? '?'.$query_string : ''));
 				exit;
 			}
 
@@ -185,7 +209,7 @@
 			$token = new token;
 			if (!$token->validate($_SERVER['PHP_SELF'])) {
 				message::add($text['message-invalid_token'],'negative');
-				header('Location: devices.php?'.(!empty($order_by) ? '&order_by='.$order_by.'&order='.$order : null).(isset($page) && is_numeric($page) ? '&page='.$page : null).(!empty($search) ? '&search='.urlencode($search) : null));
+				header('Location: devices.php'.($query_string ? '?'.$query_string : ''));
 				exit;
 			}
 
@@ -232,7 +256,7 @@
 				if ($device_domain_name != '') {
 					$message = $text['message-duplicate'].($device_domain_name != $domain_name ? ": ".$device_domain_name : null);
 					message::add($message,'negative');
-					header('Location: devices.php?'.(!empty($order_by) ? '&order_by='.$order_by.'&order='.$order : null).(isset($page) && is_numeric($page) ? '&page='.$page : null).(!empty($search) ? '&search='.urlencode($search) : null));
+					header('Location: devices.php'.($query_string ? '?'.$query_string : ''));
 					exit;
 				}
 				unset($sql, $parameters, $device_domain_name);
@@ -441,6 +465,22 @@
 						}
 					}
 
+				//update device key ids if drag and drop was used
+					if (!empty($_POST['device_key_ids'])) {
+						$device_key_ids = explode(",", $_POST["device_key_ids"]);
+
+						foreach ($device_key_ids as $device) {
+							list($key_uuid, $key_id) = explode("|", $device);
+
+							foreach ($array['devices'][0]['device_keys'] as &$key) {
+								if ($key['device_key_uuid'] == $key_uuid) {
+									$key['device_key_id'] = $key_id;
+									break;
+								}
+							}
+							unset($key);
+						}
+					}
 
 				//save the device
 					$database->save($array);
@@ -499,7 +539,7 @@
 							message::add($text['message-update']);
 						}
 						//redirect the browser
-						header("Location: device_edit.php?id=".urlencode($device_uuid).(!empty($order_by) ? '&order_by='.$order_by.'&order='.$order : null).(isset($page) && is_numeric($page) ? '&page='.$page : null).(!empty($search) ? '&search='.urlencode($search) : null));
+						header("Location: device_edit.php?id=".urlencode($device_uuid).($query_string ? '&'.$query_string : ''));
 						exit;
 					}
 
@@ -1026,7 +1066,7 @@
 	echo "<div class='action_bar' id='action_bar'>\n";
 	echo "	<div class='heading'><b>".$text['header-device']."</b></div>\n";
 	echo "	<div class='actions'>\n";
-	echo button::create(['type'=>'button','label'=>$text['button-back'],'icon'=>$settings->get('theme', 'button_icon_back', ''),'id'=>'btn_back','link'=>'devices.php?'.(!empty($order_by) ? '&order_by='.$order_by.'&order='.$order : null).(isset($page) && is_numeric($page) ? '&page='.$page : null).(!empty($search) ? '&search='.urlencode($search) : null)]);
+	echo button::create(['type'=>'button','label'=>$text['button-back'],'icon'=>$settings->get('theme', 'button_icon_back', ''),'id'=>'btn_back','link'=>'devices.php'.($query_string ? '?'.$query_string : '')]);
 	if ($action == 'update') {
 		$button_margin = 'margin-left: 15px;';
 		if (permission_exists("device_line_password") && $qr_code_enabled) {
@@ -1588,6 +1628,8 @@
 		foreach ($device_keys as $row) {
 			//set the column names
 				if ((empty($row['device_key_vendor']) || empty($previous_device_key_vendor) || $previous_device_key_vendor != $row['device_key_vendor']) && !$device_keys_generic_header_displayed) {
+					echo "		</tbody>\n";
+					echo "		<tbody class='".(!empty($row['device_key_uuid']) ? 'sortable' : null)."'>\n";
 					echo "			<tr>\n";
 					echo "				<td class='vtable'>".$text['label-device_key_category']."</td>\n";
 					if (permission_exists('device_key_id')) {
@@ -1623,6 +1665,7 @@
 						echo "					<span id='delete_toggle_keys_".$row['device_key_vendor']."'><input type='checkbox' id='checkbox_all_keys_".$row['device_key_vendor']."' name='checkbox_all' onclick=\"edit_all_toggle('keys_".$row['device_key_vendor']."');\"></span>\n";
 						echo "				</td>\n";
 					}
+					echo "				<td class='vtable'></td>\n";
 					echo "			</tr>\n";
 				}
 
@@ -1630,8 +1673,9 @@
 				if (!empty($row['device_key_uuid']) && is_uuid($row['device_key_uuid'])) {
 					echo "	<input name='device_keys[".$x."][device_key_uuid]' type='hidden' value=\"".escape($row['device_key_uuid'])."\"/>\n";
 				}
+
 			//show all the rows in the array
-				echo "			<tr>\n";
+				echo "<tr class='".(is_uuid($row["device_key_uuid"]) ? 'draggable' : null)."' data-key-uuid='".$row['device_key_uuid']."'>\n";
 				echo "<td valign='top' align='left' nowrap='nowrap'>\n";
 				echo "	<select class='formfld' name='device_keys[".$x."][device_key_category]'>\n";
 				echo "	<option value=''></option>\n";
@@ -1765,12 +1809,19 @@
 					}
 				}
 				echo "				</td>\n";
+				if (is_uuid($row["device_key_uuid"])) {
+					echo "			<td class='vtable' style='text-align: center;'>\n";
+					echo "				<span class='drag_handle' style='color: #00000055; cursor: grab;'><i class='fa-solid fa-grip-lines' style='width: 15px;'></i></span>\n";
+					echo "			</td>\n";
+				}
 				echo "			</tr>\n";
 			//set the previous vendor
 				$previous_device_key_vendor = $row['device_key_vendor'] ?? '';
 			//increment the array key
 				$x++;
 		}
+
+		echo "			</tbody>\n";
 		echo "			</table>\n";
 		if (!empty($text['description-keys'])) {
 			echo "			<br>".$text['description-keys']."\n";
@@ -2067,6 +2118,55 @@
 	echo "</table>";
 	echo "</div>\n";
 	echo "<br><br>";
+
+	//include sortablejs
+	echo "<script src='/resources/sortablejs/sortable.min.js'></script>";
+
+	//device key drag and drop
+	echo "<input type='hidden' id='device_key_ids' name='device_key_ids' value='' />\n";
+	?>
+	<style>
+
+	.selected td:has(.drag_handle) {
+		background-color: #00000015;
+	}
+
+	</style>
+	<script>
+
+	const sortable_lists = document.querySelectorAll('.sortable');
+
+	sortable_lists.forEach(function(list) {
+		Sortable.create(list, {
+			animation: 150,
+			draggable: '.draggable',
+			handle: '.drag_handle',
+			onSort: update_device_key_ids,
+			multiDrag: true,
+			selectedClass: 'selected',
+		});
+	});
+
+	function update_device_key_ids() {
+		let device_key_list = [];
+
+		sortable_lists.forEach(function(list) {
+			let device_keys = list.querySelectorAll('tr.draggable');
+			let key_id = 1;
+
+			//add the device_keys to the list
+			device_keys.forEach(function(device_key) {
+				let key_uuid = device_key.getAttribute('data-key-uuid');
+				device_key_list.push(`${key_uuid}|${key_id}`);
+				key_id += 1;
+			});
+		});
+
+		document.getElementById('device_key_ids').value = device_key_list;
+	}
+
+	</script>
+	<?php
 	echo "</form>";
 
 	echo "<script>\n";

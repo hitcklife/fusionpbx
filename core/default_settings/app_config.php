@@ -269,7 +269,7 @@
 		$apps[$x]['default_settings'][$y]['default_setting_category'] = "login";
 		$apps[$x]['default_settings'][$y]['default_setting_subcategory'] = "domain_name";
 		$apps[$x]['default_settings'][$y]['default_setting_name'] = "array";
-		$apps[$x]['default_settings'][$y]['default_setting_value'] = "pbx1.yourdomain.com";
+		$apps[$x]['default_settings'][$y]['default_setting_value'] = "tenant.domain.local";
 		$apps[$x]['default_settings'][$y]['default_setting_enabled'] = "false";
 		$apps[$x]['default_settings'][$y]['default_setting_description'] = "Domain select option displayed on the login box.";
 		$y++;
@@ -312,14 +312,6 @@
 		$apps[$x]['default_settings'][$y]['default_setting_value'] = "/core/dashboard/";
 		$apps[$x]['default_settings'][$y]['default_setting_enabled'] = "false";
 		$apps[$x]['default_settings'][$y]['default_setting_description'] = "Destination after login";
-		$y++;
-		$apps[$x]['default_settings'][$y]['default_setting_uuid'] = "47b951c9-b339-4733-9104-a979f6e2f551";
-		$apps[$x]['default_settings'][$y]['default_setting_category'] = "domain";
-		$apps[$x]['default_settings'][$y]['default_setting_subcategory'] = "setting_value_input_type";
-		$apps[$x]['default_settings'][$y]['default_setting_name'] = "text";
-		$apps[$x]['default_settings'][$y]['default_setting_value'] = "input";
-		$apps[$x]['default_settings'][$y]['default_setting_enabled'] = "true";
-		$apps[$x]['default_settings'][$y]['default_setting_description'] = "";
 		$y++;
 		$apps[$x]['default_settings'][$y]['default_setting_uuid'] = "2e217303-53ff-4dda-b74e-7f07738d83c2";
 		$apps[$x]['default_settings'][$y]['default_setting_category'] = "editor";
