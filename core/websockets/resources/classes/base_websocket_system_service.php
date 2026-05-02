@@ -65,6 +65,15 @@ abstract class base_websocket_system_service extends service implements websocke
 	}
 
 	/**
+	 * Clear all active timers.
+	 *
+	 * @return void
+	 */
+	protected function clear_timers(): void {
+		$this->timers = [];
+	}
+
+	/**
 	 * Append command options to set the websockets port and host address
 	 *
 	 * @return void
@@ -200,7 +209,16 @@ abstract class base_websocket_system_service extends service implements websocke
 			if (!empty($read)) {
 				$write = $except = [];
 				// Wait for an event and timeout at 1/3 of a second so we can re-check all connections
-				if (false === stream_select($read, $write, $except, 0, 333333)) {
+				$select_result = @stream_select($read, $write, $except, 0, 333333);
+				if ($select_result === false) {
+					// A signal (for example SIGUSR1 during service reload) can interrupt stream_select().
+					// If this happens, keep running and let the loop continue with updated state.
+					$last_error = error_get_last();
+					$error_message = strtolower((string)($last_error['message'] ?? ''));
+					if (str_contains($error_message, 'interrupted system call')) {
+						continue;
+					}
+
 					// severe error encountered so exit
 					$this->running = false;
 					// Exit with non-zero exit code
@@ -323,9 +341,13 @@ abstract class base_websocket_system_service extends service implements websocke
 		// Read the JSON string
 		$json_string = $this->ws_client->read();
 
-		// Nothing to do
+		// Nothing to do - connection may have been closed by server
 		if ($json_string === null) {
-			$this->warning('Message received from Websocket is empty');
+			if (!$this->ws_client->is_connected()) {
+				$this->notice('Websocket connection closed by server, will reconnect');
+			} else {
+				$this->warning('Message received from Websocket is empty');
+			}
 			return;
 		}
 
@@ -333,15 +355,21 @@ abstract class base_websocket_system_service extends service implements websocke
 
 		// Get the web socket message as an object
 		$message = websocket_message::create_from_json_message($json_string);
+		if (!($message instanceof websocket_message)) {
+			$this->warning('Invalid websocket message received; ignoring frame');
+			return;
+		}
+
+		$topic = $message->topic();
 
 		// Nothing to do
-		if (empty($message->topic())) {
-			$this->error("Message received does not have topic");
+		if (empty($topic)) {
+			$this->warning("Message received does not have topic. Message dropped.");
 			return;
 		}
 
 		// Call the registered topic event
-		$this->trigger_topic($message->topic, $message, $this->ws_client);
+		$this->trigger_topic($topic, $message, $this->ws_client);
 	}
 
 	/**

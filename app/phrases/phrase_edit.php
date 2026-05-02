@@ -17,7 +17,7 @@
 
 	The Initial Developer of the Original Code is
 	Mark J Crane <markjcrane@fusionpbx.com>
-	Portions created by the Initial Developer are Copyright (C) 2008-2025
+	Portions created by the Initial Developer are Copyright (C) 2008-2026
 	the Initial Developer. All Rights Reserved.
 
 	Contributor(s):
@@ -42,6 +42,32 @@
 	$phrase_name = '';
 	$phrase_language = '';
 	$phrase_description = '';
+
+// Set variables from http GET parameters
+	$page = is_numeric($_GET['page'] ?? '') ? $_GET['page'] : 0;
+	$order_by = preg_replace('#[^a-zA-Z0-9_\-]#', '', ($_GET['order_by'] ?? 'phrase_name'));
+	$order = ($_GET['order'] ?? '') === 'desc' ? 'desc' : 'asc';
+	$search = $_GET['search'] ?? '';
+	$show = $_GET['show'] ?? '';
+
+// Build the query string
+	$param = [];
+	if (!empty($page)) {
+		$param['page'] = $page;
+	}
+	if (!empty($_GET['order_by'])) {
+		$param['order_by'] = $order_by;
+	}
+	if (!empty($_GET['order'])) {
+		$param['order'] = $order;
+	}
+	if (!empty($search)) {
+		$param['search'] = $search;
+	}
+	if (!empty($show) && $show == 'all' && permission_exists('phrase_all')) {
+		$param['show'] = $show;
+	}
+	$query_string = http_build_query($param);
 
 //set the action as an add or an update
 	if (!empty($_REQUEST["id"])) {
@@ -69,7 +95,7 @@
 						break;
 				}
 
-				header('Location: phrases.php');
+				header('Location: phrases.php'.($query_string ? '?'.$query_string : ''));
 				exit;
 			}
 
@@ -99,7 +125,7 @@
 			$token = new token;
 			if (!$token->validate($_SERVER['PHP_SELF'])) {
 				message::add($text['message-invalid_token'],'negative');
-				header('Location: phrases.php');
+				header('Location: phrases.php'.($query_string ? '?'.$query_string : ''));
 				exit;
 			}
 
@@ -179,7 +205,7 @@
 
 					//send a redirect
 						message::add($text['message-add']);
-						header("Location: phrase_edit.php?id=".$phrase_uuid);
+						header("Location: phrase_edit.php?id=".$phrase_uuid.($query_string ? '&'.$query_string : ''));
 						exit;
 				}
 
@@ -217,6 +243,22 @@
 							}
 						}
 
+					//update phrase detail order if drag and drop was used
+						if (!empty($_POST['phrase_details_order'])) {
+							$phrase_details_order = explode(",", $_POST["phrase_details_order"]);
+							$x = 0;
+
+							foreach ($phrase_details_order as $phrase) {
+								list($uuid, $order) = explode("|", $phrase);
+
+								$array['phrase_details'][$x]['phrase_detail_uuid'] = $uuid;
+								$array['phrase_details'][$x]['phrase_detail_order'] = $order;
+								$x++;
+							}
+							$p = permissions::new();
+							$p->add('phrase_detail_edit', 'temp');
+						}
+
 					//execute update/insert
 						$p = permissions::new();
 						$p->add('phrase_detail_add', 'temp');
@@ -224,6 +266,7 @@
 						$database->save($array);
 						unset($array);
 
+						$p->delete('phrase_detail_edit', 'temp');
 						$p->delete('phrase_detail_add', 'temp');
 
 					//remove checked phrase details
@@ -247,7 +290,7 @@
 
 					//send a redirect
 						message::add($text['message-update']);
-						header("Location: phrase_edit.php?id=".$phrase_uuid);
+						header("Location: phrase_edit.php?id=".$phrase_uuid.($query_string ? '&'.$query_string : ''));
 						exit;;
 
 				}
@@ -442,7 +485,7 @@
 	}
 	echo "	</div>\n";
 	echo "	<div class='actions'>\n";
-	echo button::create(['type'=>'button','label'=>$text['button-back'],'icon'=>$settings->get('theme', 'button_icon_back'),'id'=>'btn_back','link'=>'phrases.php']);
+	echo button::create(['type'=>'button','label'=>$text['button-back'],'icon'=>$settings->get('theme', 'button_icon_back'),'id'=>'btn_back','link'=>'phrases.php'.($query_string ? '?'.$query_string : '')]);
 	if ($action == "update" && permission_exists('phrase_delete')) {
 		echo button::create(['type'=>'button','label'=>$text['button-delete'],'icon'=>$settings->get('theme', 'button_icon_delete'),'name'=>'btn_delete','style'=>'margin-left: 15px;','onclick'=>"modal_open('modal-delete','btn_delete');"]);
 	}
@@ -484,6 +527,7 @@
 	echo "<td class='vncell' valign='top'>".$text['label-structure']."</td>";
 	echo "<td class='vtable' align='left'>";
 	echo "	<table border='0' cellpadding='0' cellspacing='0'>\n";
+	echo "	<tbody id='sortable'>\n";
 	echo "		<tr>\n";
 	echo "			<td class='vtable'><strong>".$text['label-function']."</strong></td>\n";
 	echo "			<td class='vtable'><strong>".$text['label-action']."</strong></td>\n";
@@ -517,7 +561,7 @@
 				$phrase_detail_function = $field['phrase_detail_function'];
 				$phrase_detail_data = $field['phrase_detail_data'];
 			}
-			echo "<tr>\n";
+			echo "<tr class='draggable' data-detail-uuid='".$field['phrase_detail_uuid']."'>\n";
 			echo "	<td class='vtable'>".escape($phrase_detail_function)."&nbsp;</td>\n";
 			echo "	<td class='vtable'>".escape($phrase_detail_data)."&nbsp;</td>\n";
 			echo "	<td class='vtable' style='text-align: center;'>".$field['phrase_detail_order']."&nbsp;</td>\n";
@@ -525,12 +569,16 @@
 			if (is_uuid($field['phrase_detail_uuid'])) {
 				echo "		<input type='checkbox' name='phrase_details_delete[".$x."][checked]' value='true' class='chk_delete checkbox_details' onclick=\"edit_delete_action('details');\">\n";
 				echo "		<input type='hidden' name='phrase_details_delete[".$x."][uuid]' value='".escape($field['phrase_detail_uuid'])."' />\n";
+				echo "		<td class='vtable' style='text-align: center;'>\n";
+				echo "			<span class='drag_handle' style='color: #00000055; cursor: grab;'><i class='fa-solid fa-grip-lines' style='width: 15px;'></i></span>\n";
+				echo "		</td>\n";
 			}
 			echo "	</td>\n";
 			echo "</tr>\n";
 		}
 	}
 	unset($phrase_details, $field);
+
 	echo "<tr>\n";
 	echo "	<td class='vtable' style='border-bottom: none;' align='left' nowrap='nowrap'>\n";
 	echo "		<select name='phrase_detail_function' id='phrase_detail_function' class='formfld' onchange=\"load_action_options(this.selectedIndex);\">\n";
@@ -561,6 +609,7 @@
 	echo "	</td>\n";
 
 	echo "	</tr>\n";
+	echo "</tbody>\n";
 	echo "</table>\n";
 
 	echo "	".$text['description-structure']."\n";
@@ -632,6 +681,50 @@
 		echo "	<input type='hidden' name='phrase_uuid' value='".escape($phrase_uuid)."'>\n";
 	}
 	echo "<input type='hidden' name='".$token['name']."' value='".$token['hash']."'>\n";
+
+	//include sortablejs
+	echo "<script src='/resources/sortablejs/sortable.min.js'></script>";
+
+	//phrase details drag and drop
+	echo "<input type='hidden' id='phrase_details_order' name='phrase_details_order' value='' />\n";
+	?>
+	<style>
+
+	.selected td:has(.drag_handle) {
+		background-color: #00000015;
+	}
+
+	</style>
+	<script>
+
+	const sortable_list = document.getElementById('sortable');
+
+	Sortable.create(sortable_list, {
+		animation: 150,
+		draggable: '.draggable',
+		handle: '.drag_handle',
+		onSort: update_phrase_details_order,
+		multiDrag: true,
+		selectedClass: 'selected',
+	});
+
+	function update_phrase_details_order() {
+		const phrase_details_list = [];
+		const phrase_details = sortable_list.querySelectorAll('.draggable');
+		let order = 10;
+
+		//add the phrase details to the list
+		phrase_details.forEach(function(phrase_detail) {
+			let uuid = phrase_detail.getAttribute('data-detail-uuid');
+			phrase_details_list.push(`${uuid}|${order}`);
+			order += 10;
+		});
+
+		document.getElementById('phrase_details_order').value = phrase_details_list;
+	}
+
+	</script>
+	<?php
 
 	echo "</form>";
 

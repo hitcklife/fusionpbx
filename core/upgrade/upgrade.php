@@ -191,6 +191,10 @@
 		echo "\n";
 	}
 
+//add missing services
+	$service = new services();
+	$service->add_missing();
+
 //show the help menu
 	if ($upgrade_type == 'help' or $upgrade_type == '-h' or $upgrade_type == '--help') {
 
@@ -470,25 +474,31 @@
 		if (empty($argv[2]) || $argv[2] == 'update') {
 			//send a message to the console
 			echo "[ Update ] Update default services\n";
+			//echo ($text['description-upgrade_services'] ?? "")."\n";
 
 			//add or update all the services
-			upgrade_services($text, $settings);
+			$object = new services();
+			$object->upgrade('all');
 		}
 
 		//send a message to the console
 		if (empty($argv[2]) || $argv[2] == 'stop') {
 			echo "[ Update ] Stop services\n";
+			//echo ($text['description-stop_services'] ?? "")."\n";
 
 			//stop all the services
-			stop_services($text, $settings);
+			$object = new services();
+			$object->stop('all');
 		}
 
 		//send a message to the console
 		if (empty($argv[2]) || $argv[2] == 'restart') {
 			echo "[ Update ] Restart services\n";
+			//echo ($text['description-restart_services'] ?? "")."\n";
 
 			//restart all the services
-			restart_services($text, $settings);
+			$object = new services();
+			$object->restart('all');
 		}
 
 	}
@@ -604,9 +614,6 @@ function update_file_permissions($text, settings $settings) {
 		if ($log_directory !== null) {
 			$directories[] = $log_directory . '/xml_cdr';
 		}
-
-		//update the auto_loader cache permissions file
-		$directories[] = sys_get_temp_dir() . '/' . auto_loader::CLASSES_FILE;
 
 		//execute chown command for each directory
 		foreach ($directories as $dir) {

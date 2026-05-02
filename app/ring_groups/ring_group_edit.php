@@ -58,6 +58,8 @@
 	$ring_group_forward_destination = '';
 	$ring_group_forward_toll_allow = '';
 	$ring_group_description = '';
+	$ring_group_wait_announcement = '';
+	$ring_group_wait_interval = '';
 	$onkeyup = '';
 	$total_ring_groups = '0';
 	$ring_group_ringback = $settings->get('ring_group', 'default_ringback', '');
@@ -66,6 +68,33 @@
 	$ring_group_follow_me_enabled = $settings->get('ring_group', 'follow_me_enabled', false);
 	$destination_delay_max = $settings->get('ring_group', 'destination_delay_max', '');
 	$destination_timeout_max = $settings->get('ring_group', 'destination_timeout_max', '');
+
+// Set variables from http GET parameters
+	$page = is_numeric($_GET['page'] ?? '') ? $_GET['page'] : 0;
+	$order_by = preg_replace('#[^a-zA-Z0-9_\-]#', '', ($_GET['order_by'] ?? 'ring_group_name'));
+	$order = ($_GET['order'] ?? '') === 'desc' ? 'desc' : 'asc';
+	$sort = $order_by == 'ring_group_extension' ? 'natural' : null;
+	$search = $_GET['search'] ?? '';
+	$show = $_GET['show'] ?? '';
+
+// Build the query string
+	$param = [];
+	if (!empty($page)) {
+		$param['page'] = $page;
+	}
+	if (!empty($_GET['order_by'])) {
+		$param['order_by'] = $order_by;
+	}
+	if (!empty($_GET['order'])) {
+		$param['order'] = $order;
+	}
+	if (!empty($search)) {
+		$param['search'] = $search;
+	}
+	if (!empty($show) && $show == 'all' && permission_exists('ring_group_all')) {
+		$param['show'] = $show;
+	}
+	$query_string = http_build_query($param);
 
 //get the domain_uuid
 	$domain_uuid = $_SESSION['domain_uuid'];
@@ -132,7 +161,7 @@
 			message::add($text['message-delete']);
 
 			//redirect the browser
-			header("Location: ring_group_edit.php?id=$ring_group_uuid");
+			header("Location: ring_group_edit.php?id=".$ring_group_uuid.($query_string ? '&'.$query_string : ''));
 			exit;
 	}
 
@@ -146,7 +175,7 @@
 
 		if (is_numeric($settings->get('limit', 'ring_groups', '')) && $total_ring_groups >= $settings->get('limit', 'ring_groups', '')) {
 			message::add($text['message-maximum_ring_groups'].' '.$settings->get('limit', 'ring_groups', ''), 'negative');
-			header('Location: ring_groups.php');
+			header('Location: ring_groups.php'.($query_string ? '?'.$query_string : ''));
 			exit;
 		}
 	}
@@ -174,7 +203,7 @@
 						break;
 				}
 
-				header('Location: ring_groups.php');
+				header('Location: ring_groups.php'.($query_string ? '?'.$query_string : ''));
 				exit;
 			}
 
@@ -182,6 +211,8 @@
 			$ring_group_name = $_POST["ring_group_name"];
 			$ring_group_extension = $_POST["ring_group_extension"];
 			$ring_group_greeting = $_POST["ring_group_greeting"];
+			$ring_group_wait_announcement = $_POST["ring_group_wait_announcement"];
+			$ring_group_wait_interval = $_POST["ring_group_wait_interval"];
 			$ring_group_strategy = $_POST["ring_group_strategy"];
 			$ring_group_destinations = $_POST["ring_group_destinations"];
 			$ring_group_timeout_action = $_POST["ring_group_timeout_action"];
@@ -269,7 +300,7 @@
 		message::add($text['message-add']);
 
 		//redirect the browser
-		header("Location: ring_group_edit.php?id=".urlencode($ring_group_uuid));
+		header("Location: ring_group_edit.php?id=".urlencode($ring_group_uuid).($query_string ? '&'.$query_string : ''));
 		exit;
 	}
 
@@ -280,7 +311,7 @@
 			$token = new token;
 			if (!$token->validate($_SERVER['PHP_SELF'])) {
 				message::add($text['message-invalid_token'],'negative');
-				header('Location: ring_groups.php');
+				header('Location: ring_groups.php'.($query_string ? '?'.$query_string : ''));
 				exit;
 			}
 
@@ -365,6 +396,8 @@
 			$array['ring_groups'][0]["ring_group_name"] = $ring_group_name;
 			$array['ring_groups'][0]["ring_group_extension"] = $ring_group_extension;
 			$array['ring_groups'][0]["ring_group_greeting"] = $ring_group_greeting;
+			$array['ring_groups'][0]["ring_group_wait_announcement"] = $ring_group_wait_announcement;
+			$array['ring_groups'][0]["ring_group_wait_interval"] = $ring_group_wait_interval;
 			$array['ring_groups'][0]["ring_group_strategy"] = $ring_group_strategy;
 			$array["ring_groups"][0]["ring_group_exit_key"] = $ring_group_exit_key;
 			$array["ring_groups"][0]["ring_group_call_timeout"] = $ring_group_call_timeout;
@@ -544,7 +577,7 @@
 			}
 
 		//redirect the browser
-			header("Location: ring_group_edit.php?id=".urlencode($ring_group_uuid));
+			header("Location: ring_group_edit.php?id=".urlencode($ring_group_uuid).($query_string ? '&'.$query_string : ''));
 			exit;
 	}
 
@@ -559,6 +592,8 @@
 			$ring_group_name = $row["ring_group_name"];
 			$ring_group_extension = $row["ring_group_extension"];
 			$ring_group_greeting = $row["ring_group_greeting"];
+			$ring_group_wait_announcement = $row["ring_group_wait_announcement"];
+			$ring_group_wait_interval = $row["ring_group_wait_interval"];
 			$ring_group_strategy = $row["ring_group_strategy"];
 			$ring_group_timeout_app = $row["ring_group_timeout_app"];
 			$ring_group_timeout_data = $row["ring_group_timeout_data"];
@@ -593,6 +628,8 @@
 	$ring_group_exit_key = $ring_group_exit_key ?? '';
 	$ring_group_call_timeout = $ring_group_call_timeout ?? '30';
 	$ring_group_greeting = $ring_group_greeting ?? '';
+	$ring_group_wait_announcement = $ring_group_wait_announcement ?? '';
+	$ring_group_wait_interval = $ring_group_wait_interval ?? '';
 	$ring_group_forward_enabled = $ring_group_forward_enabled ?? false;
 	$ring_group_context = $ring_group_context ?? $domain_name;
 	$ring_group_enabled = $ring_group_enabled ?? true;
@@ -746,7 +783,7 @@
 	echo "<div class='action_bar' id='action_bar'>\n";
 	echo "	<div class='heading'><b>".$text['title-ring_group']."</b></div>\n";
 	echo "	<div class='actions'>\n";
-	echo button::create(['type'=>'button','label'=>$text['button-back'],'icon'=>$settings->get('theme', 'button_icon_back'),'id'=>'btn_back','link'=>'ring_groups.php']);
+	echo button::create(['type'=>'button','label'=>$text['button-back'],'icon'=>$settings->get('theme', 'button_icon_back'),'id'=>'btn_back','link'=>'ring_groups.php'.($query_string ? '?'.$query_string : '')]);
 	if ($action == 'update') {
 		$button_margin = 'margin-left: 15px;';
 		if (permission_exists('ring_group_add') && (empty($settings->get('limit', 'ring_groups', '')) || ($total_ring_groups < $settings->get('limit', 'ring_groups', '')))) {
@@ -880,6 +917,100 @@
 	}
 	echo "<br />\n";
 	echo $text['description-'.$instance_label]."\n";
+	echo "</td>\n";
+	echo "</tr>\n";
+
+	$instance_id = 'ring_group_wait_announcement';
+	$instance_label = 'wait_announcement';
+	$instance_value = $ring_group_wait_announcement;
+	echo "<tr>\n";
+	echo "<td class='vncell' rowspan='2' valign='top' align='left' nowrap='nowrap'>\n";
+	echo "	".$text['label-wait_announcement']."\n";
+	echo "</td>\n";
+	echo "<td class='vtable playback_progress_bar_background' id='recording_progress_bar_".$instance_id."' onclick=\"recording_play('".$instance_id."', document.getElementById('".$instance_id."').value, document.getElementById('".$instance_id."').options[document.getElementById('".$instance_id."').selectedIndex].parentNode.getAttribute('data-type'));\" style='display: none; border-bottom: none; padding-top: 0 !important; padding-bottom: 0 !important;' align='left'><span class='playback_progress_bar' id='recording_progress_".$instance_id."'></span></td>\n";
+	echo "</tr>\n";
+	echo "<tr>\n";
+	echo "<td class='vtable' align='left'>\n";
+	echo "<select name='".$instance_id."' id='".$instance_id."' class='formfld' ".(permission_exists('recording_play') || permission_exists('recording_download') ? "onchange=\"recording_reset('".$instance_id."'); set_playable('".$instance_id."', this.value, this.options[this.selectedIndex].parentNode.getAttribute('data-type'));\"" : null).">\n";
+	echo "	<option value=''></option>\n";
+	$found = $playable = false;
+	if (!empty($audio_files) && is_array($audio_files) && @sizeof($audio_files) != 0) {
+		foreach ($audio_files as $key => $value) {
+			echo "<optgroup label=".$text['label-'.$key]." data-type='".$key."'>\n";
+			foreach ($value as $row) {
+				if ($key == 'recordings') {
+					if (
+						!empty($instance_value) &&
+						($instance_value == $row["value"] || $instance_value == $settings->get('switch', 'recordings', '')."/".$domain_name.'/'.$row["value"]) &&
+						file_exists($settings->get('switch', 'recordings', '')."/".$domain_name.'/'.pathinfo($row["value"], PATHINFO_BASENAME))
+						) {
+						$selected = "selected='selected'";
+						$playable = '../recordings/recordings.php?action=download&type=rec&filename='.pathinfo($row["value"], PATHINFO_BASENAME);
+						$found = true;
+					}
+					else {
+						unset($selected);
+					}
+				}
+				else if ($key == 'sounds') {
+					if (!empty($instance_value) && $instance_value == $row["value"]) {
+						$selected = "selected='selected'";
+						$playable = '../switch/sounds.php?action=download&filename='.$row["value"];
+						$found = true;
+					}
+					else {
+						unset($selected);
+					}
+				}
+				else if ($key == 'phrases') {
+					if (!empty($instance_value) && $instance_value == $row["value"]) {
+						$selected = "selected='selected'";
+						$playable = '';
+						$found = true;
+					}
+					else {
+						unset($selected);
+					}
+				}
+				else {
+					unset($selected);
+				}
+				echo "	<option value='".escape($row["value"])."' ".($selected ?? '').">".escape($row["name"])."</option>\n";
+			}
+			echo "</optgroup>\n";
+		}
+	}
+	if (if_group("superadmin") && !empty($instance_value) && !$found) {
+		echo "	<option value='".escape($instance_value)."' selected='selected'>".escape($instance_value)."</option>\n";
+	}
+	unset($selected);
+	echo "	</select>\n";
+	if (if_group("superadmin")) {
+		echo "<input type='button' id='btn_select_to_input_".$instance_id."' class='btn' name='' alt='back' onclick='toggle_select_input(document.getElementById(\"".$instance_id."\"), \"".$instance_id."\"); this.style.visibility=\"hidden\";' value='&#9665;'>";
+	}
+	if ((permission_exists('recording_play') || permission_exists('recording_download')) && (!empty($playable) || empty($instance_value))) {
+		switch (pathinfo($playable, PATHINFO_EXTENSION)) {
+			case 'wav' : $mime_type = 'audio/wav'; break;
+			case 'mp3' : $mime_type = 'audio/mpeg'; break;
+			case 'ogg' : $mime_type = 'audio/ogg'; break;
+		}
+		echo "<audio id='recording_audio_".$instance_id."' style='display: none;' preload='none' ontimeupdate=\"update_progress('".$instance_id."')\" onended=\"recording_reset('".$instance_id."');\" src='".($playable ?? '')."' type='".($mime_type ?? '')."'></audio>";
+		echo button::create(['type'=>'button','title'=>$text['label-play'].' / '.$text['label-pause'],'icon'=>$settings->get('theme', 'button_icon_play'),'id'=>'recording_button_'.$instance_id,'style'=>'display: '.(!empty($mime_type) ? 'inline' : 'none'),'onclick'=>"recording_play('".$instance_id."', document.getElementById('".$instance_id."').value, document.getElementById('".$instance_id."').options[document.getElementById('".$instance_id."').selectedIndex].parentNode.getAttribute('data-type'))"]);
+		unset($playable, $mime_type);
+	}
+	echo "<br />\n";
+	echo $text['description-wait_announcement']."\n";
+	echo "</td>\n";
+	echo "</tr>\n";
+
+	echo "<tr>\n";
+	echo "<td class='vncell' valign='top' align='left' nowrap='nowrap'>\n";
+	echo "	".$text['label-wait_interval']."\n";
+	echo "</td>\n";
+	echo "<td class='vtable' align='left'>\n";
+	echo "	<input class='formfld' type='number' name='ring_group_wait_interval' maxlength='255' value=\"".escape($ring_group_wait_interval)."\" min='1' max='300'>\n";
+	echo "<br />\n";
+	echo $text['description-wait_interval']."\n";
 	echo "</td>\n";
 	echo "</tr>\n";
 

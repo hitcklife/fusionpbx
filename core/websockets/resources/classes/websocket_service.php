@@ -159,8 +159,8 @@ class websocket_service extends service {
 	 * @access protected
 	 */
 	protected static function set_command_options() {
-		//TODO: ip address
-		//TODO: port
+		// TODO: ip address
+		// TODO: port
 	}
 
 	/**
@@ -238,6 +238,7 @@ class websocket_service extends service {
 						$class_name         = $subscriber_service->service_class();
 						// Make sure we can call the 'create_filter_chain_for' method
 						if (is_a($class_name, 'websocket_service_interface', true)) {
+							$this->debug('Creating filter chain for subscriber ' . $subscriber->id . ' for service ' . $subscriber_service->service_name() . ' using class ' . $class_name);
 							try {
 								// Call the service class method to validate the subscriber
 								$filter = $class_name::create_filter_chain_for($subscriber);
@@ -314,6 +315,15 @@ class websocket_service extends service {
 					$this->info("Subscriber $ste->subscriber_id token expired");
 					// Subscriber token has expired so disconnect them
 					$this->handle_disconnect($subscriber->socket_id());
+				} catch (subscriber_not_subscribed_exception $snse) {
+					// Subscriber can issue requests to a service without being subscribed
+					// to service broadcasts; skip and continue fan-out.
+					$this->debug("Skipping subscriber {$snse->subscriber_id}: not subscribed to service '{$message->service_name}'");
+				} catch (socket_disconnected_exception $sde) {
+					$this->info("Subscriber $sde->id disconnected during broadcast");
+					$this->handle_disconnect($subscriber->socket_id());
+				} catch (\Throwable $e) {
+					$this->warning("Broadcast send failed for subscriber {$subscriber->id}: " . $e->getMessage());
 				}
 			}
 		} // Route a specific request from a service back to a subscriber
@@ -498,26 +508,29 @@ class websocket_service extends service {
 	 * @return void
 	 */
 	private function handle_client_message(subscriber $subscriber, websocket_message $message) {
-		//find the service with that name
+		// find the service with that name
 		foreach ($this->subscribers as $service) {
-			//when we find the service send the request
+			// when we find the service send the request
 			if ($service->service_equals($message->service_name())) {
-				//notify we found the service
+				// notify we found the service
 				$this->debug("Routing message to service '" . $message->service_name() . "' for topic '" . $message->topic() . "'");
 
-				//attach the current subscriber permissions so the service can verify
+				// attach the current subscriber permissions so the service can verify
 				$message->permissions($subscriber->get_permissions());
 
-				//attach the domain name
+				// attach the domain name
 				$message->domain_name($subscriber->get_domain_name());
 
-				//attach the client id so we can track the request
+				// attach the domain uuid
+				$message->domain_uuid($subscriber->get_domain_uuid());
+
+				// attach the client id so we can track the request
 				$message->resource_id = $subscriber->id;
 
-				//send the modified web socket message to the service
+				// send the modified web socket message to the service
 				$service->send((string)$message);
 
-				//continue searching for service providers
+				// continue searching for service providers
 				continue;
 			}
 		}
@@ -556,7 +569,13 @@ class websocket_service extends service {
 			//
 			// Merge all sockets to a single array
 			//
-			$read  = array_merge([$this->server_socket], $this->clients);
+			$this->update_connected_clients();
+			$read = [$this->server_socket];
+			foreach ($this->clients as $client) {
+				if (is_resource($client) && !feof($client)) {
+					$read[] = $client;
+				}
+			}
 			$write = $except = [];
 
 			//$this->debug("Waiting on event. Connected Clients: (".count($this->clients).")", LOG_DEBUG);
@@ -666,11 +685,11 @@ class websocket_service extends service {
 	 * @override service
 	 */
 	public function __destruct() {
-		//disconnect all clients
+		// disconnect all clients
 		foreach ($this->clients as $socket) {
 			$this->disconnect_client($socket);
 		}
-		//finish destruct using the parent
+		// finish destruct using the parent
 		parent::__destruct();
 	}
 
@@ -872,13 +891,27 @@ class websocket_service extends service {
 	 * @return string
 	 */
 	private function read_bytes($socket, int $length): string {
+		if ($length <= 0 || !is_resource($socket)) {
+			return '';
+		}
 		$data = '';
-		while (strlen($data) < $length && is_resource($socket)) {
-			$chunk = fread($socket, $length - strlen($data));
-			if ($chunk === false || $chunk === '' || !is_resource($socket)) {
-				//$this->disconnect_client($socket);
+		$retries = 0;
+		$max_retries = 20;
+		while (strlen($data) < $length && is_resource($socket) && !feof($socket)) {
+			$remaining = $length - strlen($data);
+			$chunk = @fread($socket, min($remaining, 8192));
+			if ($chunk === false) {
 				return '';
 			}
+			if ($chunk === '') {
+				$retries++;
+				if ($retries >= $max_retries) {
+					return '';
+				}
+				usleep(5000);
+				continue;
+			}
+			$retries = 0;
 			$data .= $chunk;
 		}
 		return $data;
@@ -891,14 +924,20 @@ class websocket_service extends service {
 	 *
 	 * @return string
 	 */
+	// Maximum allowed payload size per frame (16 MB)
+	const MAX_FRAME_PAYLOAD = 16 * 1024 * 1024;
+
 	private function receive_frame($socket): string {
 		// Read first two header bytes
 		$hdr = $this->read_bytes($socket, 2);
 		// Ensure we have the correct number of bytes
 		if (strlen($hdr) !== 2) {
-			$this->warning('Header is empty!');
-			$this->debug('Header content: ' . bin2hex($hdr) . '(' . strlen($hdr) . ' bytes)');
-			$this->update_connected_clients();
+			if (!is_resource($socket) || feof($socket)) {
+				$this->disconnect_client($socket);
+			} else {
+				$this->warning('Header is empty!');
+				$this->update_connected_clients();
+			}
 			return '';
 		}
 		$bytes  = unpack('Cfirst/Csecond', $hdr);
@@ -924,14 +963,56 @@ class websocket_service extends service {
 			$length = $arr[1];
 		}
 
-		// Read mask key if client→server frame
+		// Handle control frames before reading payload
+		switch ($opcode) {
+			case 0x8: // CLOSE frame
+				// Read and discard close payload (status code + reason)
+				if ($masked) $this->read_bytes($socket, 4); // mask key
+				if ($length > 0) $this->read_bytes($socket, min($length, 125));
+				// Send close response and disconnect
+				@fwrite($socket, "\x88\x00");
+				$this->disconnect_client($socket);
+				return '';
+			case 0x9: // PING frame
+				$maskKey = $masked ? $this->read_bytes($socket, 4) : '';
+				$ping_data = $length > 0 ? $this->read_bytes($socket, min($length, 125)) : '';
+				if ($masked && strlen($maskKey) === 4 && $ping_data !== '') {
+					$unmasked = '';
+					for ($i = 0; $i < strlen($ping_data); $i++) {
+						$unmasked .= $ping_data[$i] ^ $maskKey[$i % 4];
+					}
+					$ping_data = $unmasked;
+				}
+				// Respond with PONG
+				$pong_len = strlen($ping_data);
+				@fwrite($socket, chr(0x8A) . chr($pong_len) . $ping_data);
+				return '';
+			case 0xA: // PONG frame
+				// Consume and discard pong payload
+				if ($masked) $this->read_bytes($socket, 4);
+				if ($length > 0) $this->read_bytes($socket, min($length, 125));
+				return '';
+		}
+
+		// Sanity check: reject frames with absurdly large payloads
+		if ($length > self::MAX_FRAME_PAYLOAD) {
+			$this->error("Frame payload too large ({$length} bytes), disconnecting client");
+			@fwrite($socket, "\x88\x00");
+			$this->disconnect_client($socket);
+			return '';
+		}
+
+		// Read mask key if client->server frame
 		$maskKey = $masked ? $this->read_bytes($socket, 4) : '';
 
 		// Read payload data
-		$data = $this->read_bytes($socket, $length);
+		$data = $length > 0 ? $this->read_bytes($socket, $length) : '';
 
-		if (empty($data)) {
-			$this->warning("Received empty frame (ID# $socket)");
+		if ($data === '' && $length > 0) {
+			// Client likely disconnected mid-frame
+			if (!is_resource($socket) || feof($socket)) {
+				$this->disconnect_client($socket);
+			}
 			return '';
 		}
 
@@ -941,7 +1022,7 @@ class websocket_service extends service {
 			if (strlen($maskKey) < 4)
 				return '';
 			$unmasked = '';
-			for ($i = 0; $i < $length; $i++) {
+			for ($i = 0; $i < strlen($data); $i++) {
 				$unmasked .= $data[$i] ^ $maskKey[$i % 4];
 			}
 			$data = $unmasked;
