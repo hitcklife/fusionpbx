@@ -187,6 +187,8 @@ if (!empty($_POST)) {
 	$voicemail_enabled = $_POST["voicemail_enabled"];
 	$voicemail_mail_to = $_POST["voicemail_mail_to"];
 	$voicemail_transcription_enabled = $_POST["voicemail_transcription_enabled"];
+	$voicemail_transcription_prompt_enabled = $_POST["voicemail_transcription_prompt_enabled"] ?? 'false';
+	$voicemail_transcription_prompt = $_POST["voicemail_transcription_prompt"] ?? '';
 	$voicemail_file = $_POST["voicemail_file"];
 	$voicemail_local_after_email = $_POST["voicemail_local_after_email"];
 	$user_context = $_POST["user_context"];
@@ -814,6 +816,10 @@ if (!empty($_POST) && empty($_POST["persistformvar"])) {
 						$array["voicemails"][$i]["voicemail_local_after_email"] = $voicemail_local_after_email;
 					}
 					$array["voicemails"][$i]["voicemail_transcription_enabled"] = $voicemail_transcription_enabled;
+					if ($transcribe_enabled && permission_exists('voicemail_transcription_enabled')) {
+						$array["voicemails"][$i]["voicemail_transcription_prompt_enabled"] = $voicemail_transcription_prompt_enabled;
+						$array["voicemails"][$i]["voicemail_transcription_prompt"] = $voicemail_transcription_prompt;
+					}
 					$array["voicemails"][$i]["voicemail_tutorial"] = $voicemail_tutorial ?? null;
 					$array["voicemails"][$i]["voicemail_enabled"] = $voicemail_enabled;
 					$array["voicemails"][$i]["voicemail_description"] = $description;
@@ -833,13 +839,6 @@ if (!empty($_POST) && empty($_POST["persistformvar"])) {
 				if (!empty($number_alias)) {
 					$number_alias++;
 					$voicemail_id = $number_alias;
-				}
-
-				if (!empty($mwi_account)) {
-					$mwi_account_array = explode('@', $mwi_account);
-					$mwi_account_array[0]++;
-					$mwi_account = implode('@', $mwi_account_array);
-					unset($mwi_account_array);
 				}
 			}
 		}
@@ -1007,6 +1006,8 @@ if (!empty($_GET) && (empty($_POST["persistformvar"]) || $_POST["persistformvar"
 			$voicemail_password = str_replace("#", "", $row["voicemail_password"] ?? '');
 			$voicemail_mail_to = str_replace(" ", "", $row["voicemail_mail_to"] ?? '');
 			$voicemail_transcription_enabled = $row["voicemail_transcription_enabled"];
+			$voicemail_transcription_prompt_enabled = $row["voicemail_transcription_prompt_enabled"] ?? false;
+			$voicemail_transcription_prompt = $row["voicemail_transcription_prompt"] ?? '';
 			$voicemail_tutorial = $row["voicemail_tutorial"];
 			$voicemail_file = $row["voicemail_file"];
 			$voicemail_local_after_email = $row["voicemail_local_after_email"];
@@ -1178,6 +1179,12 @@ if (!isset($voicemail_enabled)) {
 }
 if (!isset($voicemail_transcription_enabled)) {
 	$voicemail_transcription_enabled = $settings->get('voicemail', 'transcription_enabled_default', false);
+}
+if (!isset($voicemail_transcription_prompt_enabled)) {
+	$voicemail_transcription_prompt_enabled = false;
+}
+if (!isset($voicemail_transcription_prompt)) {
+	$voicemail_transcription_prompt = '';
 }
 if (!isset($voicemail_tutorial)) {
 	$voicemail_tutorial = false;
@@ -1541,11 +1548,11 @@ if (permission_exists('device_edit') && (empty($extension_type) || $extension_ty
 			echo "		<td " . ($action == 'edit' ? "class='vtable'" : null) . " style='padding-left: 5px;'>";
 			$device = new device;
 			$template_dir = $device->get_template_dir();
-			echo "			<select id='device_template' name='devices[" . $d . "][device_template]' class='formfld'>\n";
+			echo "			<select id='device_template' name='devices[" . $d . "][device_template]' class='formfld searchable_select'>\n";
 			echo "				<option value=''></option>\n";
 			if (is_dir($template_dir) && is_array($device_vendors)) {
 				foreach ($device_vendors as $row) {
-					echo "			<optgroup label='" . escape($row["name"]) . "'>\n";
+					echo "			<optgroup label='" . escape(ucwords($row["name"])) . "'>\n";
 					if (is_dir($template_dir . '/' . $row["name"])) {
 						$templates = scandir($template_dir . '/' . $row["name"]);
 						foreach ($templates as $dir) {
@@ -1570,7 +1577,6 @@ if (permission_exists('device_edit') && (empty($extension_type) || $extension_ty
 			break; //show one empty row whether adding or editing
 		}
 		echo "		</table>\n";
-		echo "		<br />\n";
 		echo $text['description-provisioning'] . "\n";
 
 		echo "</td>\n";
@@ -1905,6 +1911,39 @@ if (permission_exists('voicemail_edit') && is_dir(dirname(__DIR__, 2) . '/app/vo
 		}
 		echo "<br />\n";
 		echo $text['description-voicemail_transcription_enabled'] . "\n";
+		echo "</td>\n";
+		echo "</tr>\n";
+
+		echo "<tr>\n";
+		echo "<td class='vncell' valign='top' align='left' nowrap='nowrap'>\n";
+		echo "	" . $text['label-voicemail_transcription_prompt_enabled'] . "\n";
+		echo "</td>\n";
+		echo "<td class='vtable' align='left'>\n";
+		if ($input_toggle_style_switch) {
+			echo "	<span class='switch'>\n";
+		}
+		echo "	<select class='formfld' id='voicemail_transcription_prompt_enabled' name='voicemail_transcription_prompt_enabled' onchange=\"document.getElementById('voicemail_transcription_prompt_row').style.display = (this.value === 'true') ? '' : 'none';\">\n";
+		echo "		<option value='true' " . ($voicemail_transcription_prompt_enabled == true ? "selected='selected'" : null) . ">" . $text['option-true'] . "</option>\n";
+		echo "		<option value='false' " . ($voicemail_transcription_prompt_enabled == false ? "selected='selected'" : null) . ">" . $text['option-false'] . "</option>\n";
+		echo "	</select>\n";
+		if ($input_toggle_style_switch) {
+			echo "		<span class='slider'></span>\n";
+			echo "	</span>\n";
+		}
+		echo "<br />\n";
+		echo $text['description-voicemail_transcription_prompt_enabled'] . "\n";
+		echo "</td>\n";
+		echo "</tr>\n";
+
+		$prompt_row_style = in_array($voicemail_transcription_prompt_enabled, [true, 'true', 't'], true) ? '' : 'display:none;';
+		echo "<tr id='voicemail_transcription_prompt_row' style='" . $prompt_row_style . "'>\n";
+		echo "<td class='vncell' valign='top' align='left' nowrap='nowrap'>\n";
+		echo "	" . $text['label-voicemail_transcription_prompt'] . "\n";
+		echo "</td>\n";
+		echo "<td class='vtable' align='left'>\n";
+		echo "	<textarea class='formfld' name='voicemail_transcription_prompt' style='width:280px; height: 80px;'>" . escape($voicemail_transcription_prompt) . "</textarea>\n";
+		echo "<br />\n";
+		echo $text['description-voicemail_transcription_prompt'] . "\n";
 		echo "</td>\n";
 		echo "</tr>\n";
 	}

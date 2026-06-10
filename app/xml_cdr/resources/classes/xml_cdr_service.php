@@ -47,7 +47,7 @@ class xml_cdr_service extends service {
 	 *
 	 * @return void
 	 */
-	protected function reload_settings(): void {
+	public function reload_settings(): void {
 		// Read the config file to get any possible changes
 		parent::$config->read();
 

@@ -525,6 +525,7 @@
 					if (!empty($settings->get('provision', 'path'))) {
 						$prov = new provision(['settings' => $settings]);
 						$prov->domain_uuid = $domain_uuid;
+						$prov->device_uuid = $device_uuid;
 						$response = $prov->write();
 					}
 
@@ -1195,11 +1196,11 @@
 		echo "<div class='template_select_container'>";
 		$device = new device;
 		$template_dir = $device->get_template_dir();
-		echo "	<select id='device_template' name='device_template' class='formfld' style='float: left;'>\n";
+		echo "	<select id='device_template' name='device_template' class='formfld searchable_select' style='float: left;'>\n";
 		echo "		<option value=''></option>\n";
 		if (is_dir($template_dir) && @is_array($device_vendors)) {
 			foreach ($device_vendors as $row) {
-				echo "		<optgroup label='".escape($row["name"])."'>\n";
+				echo "		<optgroup label='".escape(ucwords($row["name"]))."'>\n";
 				if (file_exists($template_dir.'/'.$row["name"])) {
 					$templates = scandir($template_dir.'/'.$row["name"]);
 					if (is_array($templates) && @sizeof($templates) != 0) {
@@ -1223,10 +1224,8 @@
 			}
 		}
 		echo "	</select>\n";
-		echo "	<span style='float: left; clear: left;'";
 		echo "	<br />\n";
 		echo "	".$text['description-device_template']."\n";
-		echo "	</span>";
 		echo "</div>";
 		echo "
 		<style>
@@ -1636,13 +1635,16 @@
 						echo "				<td class='vtable'>".$text['label-device_key_id']."</td>\n";
 					}
 					if ($vendor_count > 1 && !empty($row['device_key_vendor'])) {
-						echo "				<td class='vtable'><i>".ucwords($row['device_key_vendor'])."</i></td>\n";
+						// echo "				<td class='vtable'><i>".ucwords($row['device_key_vendor'])."</i></td>\n";
+						echo "				<td class='vtable'>".$text['label-device_vendor']."</td>\n";
+						echo "				<td class='vtable'>".$text['label-device_key_type']."</td>\n";
 						if ($show_key_subtype) {
 							echo "				<td class='vtable'>".$text['label-device_key_subtype']."</td>\n";
 						}
 					}
 					else {
 						$device_keys_generic_header_displayed = true;
+						echo "				<td class='vtable'>".$text['label-device_vendor']."</td>\n";
 						echo "				<td class='vtable'>".$text['label-device_key_type']."</td>\n";
 						if ($show_key_subtype) {
 							echo "				<td class='vtable'>".$text['label-device_key_subtype']."</td>\n";
@@ -1723,15 +1725,26 @@
 				}
 
 				echo "<td align='left' nowrap='nowrap'>\n";
-				//echo "	<input class='formfld' type='text' name='device_keys[".$x."][device_key_type]' style='width: 120px;' maxlength='255' value=\"$row['device_key_type']\">\n";
-				if (!empty($row['device_key_vendor'])) {
-					$device_key_vendor = $row['device_key_vendor'];
+				echo "	<select class='formfld' name='device_keys[".$x."][device_key_vendor]' id='key_vendor_".$x."'>\n";
+				echo "		<option value=''></option>\n";
+				$device_key_vendor = $row['device_key_vendor'] ?? '';
+				foreach ($device_vendors as $vendor) {
+					$selected = '';
+					if ($device_key_vendor == $vendor['name']) {
+						$selected = "selected='selected'";
+					}
+					if (!empty($vendor['name'])) {
+						echo "		<option value='".escape($vendor['name'])."' $selected >".escape(ucwords($vendor['name']))."</option>\n";
+					}
 				}
-				else {
+				echo "	</select>\n";
+				echo "</td>\n";
+
+				echo "<td align='left' nowrap='nowrap'>\n";
+				//echo "	<input class='formfld' type='text' name='device_keys[".$x."][device_key_type]' style='width: 120px;' maxlength='255' value=\"$row['device_key_type']\">\n";
+				if (empty($row['device_key_vendor'])) {
 					$device_key_vendor = $device_vendor;
 				}
-
-				echo "<input type='hidden' id='key_vendor_".$x."' name='device_keys[".$x."][device_key_vendor]' value=\"".$device_key_vendor."\" />\n";
 
 				echo "<select class='formfld' name='device_keys[".$x."][device_key_type]' id='key_type_".$x."' onchange=\"document.getElementById('key_vendor_".$x."').value = this.options[this.selectedIndex].getAttribute('vendor');\">\n";
 				echo "	<option value=''></option>\n";
@@ -1740,7 +1753,7 @@
 				foreach ($vendor_functions as $function) {
 					if (empty($row['device_key_vendor']) && $function['vendor_name'] != $previous_vendor) {
 						if ($i > 0) { echo "	</optgroup>\n"; }
-						echo "	<optgroup label='".ucwords($function['vendor_name'])."'>\n";
+						echo "	<optgroup label='".escape(ucwords($function['vendor_name']))."'>\n";
 					}
 					$selected = '';
 					if (!empty($row['device_key_vendor']) && strtolower($row['device_key_vendor']) == $function['vendor_name'] && $row['device_key_type'] == $function['value']) {
@@ -1829,6 +1842,87 @@
 		echo "		</td>";
 		echo "	</tr>";
 	}
+
+	// Filter device key types when a vendor is selected
+	echo "<select id='hidden_device_key_types' style='display: none;'>\n";
+	$prev_vendor = '';
+	foreach ($vendor_functions as $function) {
+		if ($function['vendor_name'] != $prev_vendor) {
+			if ($prev_vendor !== '') {
+				echo "	</optgroup>\n";
+			}
+			echo "	<optgroup label='".escape(ucwords($function['vendor_name']))."'>\n";
+			$prev_vendor = $function['vendor_name'];
+		}
+		echo "	<option value='".escape($function['value'])."' vendor='".escape($function['vendor_name'])."'>".($text['label-'.$function['type'] ?? ''] ?? $function['value'])."</option>\n";
+	}
+	if ($prev_vendor !== '') {
+		echo "	</optgroup>\n";
+	}
+	echo "</select>\n";
+	?>
+	<script>
+	const hidden_select = document.getElementById('hidden_device_key_types');
+
+	if (hidden_select) {
+		function populate_type_select(type_select, vendor_value) {
+			// Clear current options
+			type_select.innerHTML = '<option value=""></option>';
+
+			const options = hidden_select.querySelectorAll('option');
+			const selected_vendor = (vendor_value || '').trim().toLowerCase();
+
+			let last_label = null;
+			let current_group = null;
+
+			for (const option of options) {
+				const option_vendor = (option.getAttribute('vendor') || '').trim().toLowerCase();
+
+				// Filter by vendor if one is selected
+				if (selected_vendor !== '' && option_vendor !== selected_vendor) {
+					continue;
+				}
+
+				if (selected_vendor === '') {
+					// When no vendor selected, append all options with optgroups
+					const option_group = option.closest('optgroup');
+					const option_label = option_group ? option_group.getAttribute('label') : null;
+
+					if (option_label && option_label !== last_label) {
+						if (current_group) type_select.appendChild(current_group);
+						current_group = document.createElement('optgroup');
+						current_group.setAttribute('label', option_label);
+						last_label = option_label;
+					}
+
+					if (current_group) {
+						current_group.appendChild(option.cloneNode(true));
+					} else {
+						type_select.appendChild(option.cloneNode(true));
+					}
+				} else {
+					// When a vendor is selected, append options without optgroups
+					type_select.appendChild(option.cloneNode(true));
+				}
+			}
+
+			// Append the final group if it exists
+			if (current_group) type_select.appendChild(current_group);
+		}
+
+		// Attach listener to every vendor select in the table
+		document.querySelectorAll('select[name*="[device_key_vendor]"]').forEach(vendor_select => {
+			vendor_select.addEventListener('change', function() {
+				const type_select = this.closest('tr').querySelector('select[name*="[device_key_type]"]');
+				if (!type_select) return;
+
+				populate_type_select(type_select, this.value);
+				type_select.value = ''; // Reset selection when vendor changes
+			});
+		});
+	}
+	</script>
+	<?php
 
 //device settings
 	if (permission_exists('device_setting_edit')) {

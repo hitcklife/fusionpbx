@@ -26,17 +26,19 @@
 
 /**
  * services class
- *
- * @method null delete
- * @method null toggle
- * @method null copy
  */
 class services {
 
 	/**
-	 * declare constant variables
+	 * The name of the application, used for permissions and other references.
+	 * @var string
 	 */
 	const app_name = 'services';
+
+	/**
+	 * The UUID of the application, used for permissions and other references.
+	 * @var string
+	 */
 	const app_uuid = '540c3ec2-4f0c-467f-a09d-d644439c96f2';
 
 	/**
@@ -47,13 +49,39 @@ class services {
 	private $database;
 
 	/**
-	 * declare private variables
+	 * Name of the service
+	 * @var string
 	 */
 	private $name;
+
+	/**
+	 * Name of the table in the database
+	 * @var string
+	 */
 	private $table;
+
+	/**
+	 * Name of the field used to toggle the state of the record
+	 * @var string
+	 */
 	private $toggle_field;
+
+	/**
+	 * Values used to toggle the state of the record
+	 * @var array
+	 */
 	private $toggle_values;
+
+	/**
+	 * Name of the field used for the description of the record
+	 * @var string
+	 */
 	private $description_field;
+
+	/**
+	 * Path of the services page for redirection after actions
+	 * @var string
+	 */
 	private $location;
 
 	/**
@@ -68,24 +96,12 @@ class services {
 		$this->database = $setting_array['database'] ?? database::new();
 
 		// Assign the variables
-		$this->app_name = 'services';
-		$this->app_uuid = '540c3ec2-4f0c-467f-a09d-d644439c96f2';
 		$this->name = 'service';
 		$this->table = 'services';
 		$this->toggle_field = 'service_enabled';
 		$this->toggle_values = ['true','false'];
 		$this->description_field = 'service_description';
 		$this->location = 'services.php';
-	}
-
-	/**
-	 * called when there are no references to a particular object
-	 * unset the variables used in the class
-	 */
-	public function __destruct() {
-		foreach ($this as $key => $value) {
-			unset($this->$key);
-		}
 	}
 
 	/**
@@ -117,6 +133,7 @@ class services {
 
 		// Delete multiple records
 		if (is_array($records) && @sizeof($records) != 0) {
+			$array = [];
 			// Build the delete array
 			$x = 0;
 			foreach ($records as $record) {
@@ -171,6 +188,9 @@ class services {
 
 		// Toggle the checked records
 		if (is_array($records) && @sizeof($records) != 0) {
+			$uuids = [];
+			$states = [];
+			$services = '';
 			// Get current toggle state
 			foreach($records as $record) {
 				if ($record['checked'] == 'true' && is_uuid($record['uuid'])) {
@@ -180,7 +200,7 @@ class services {
 			if (is_array($uuids) && @sizeof($uuids) != 0) {
 				$sql = "select ".$this->name."_uuid as uuid, ".$this->toggle_field." as toggle from v_".$this->table." ";
 				$sql .= "where ".$this->name."_uuid in (".implode(', ', $uuids).") ";
-				$rows = $this->database->select($sql, $parameters, 'all');
+				$rows = $this->database->select($sql, null, 'all');
 				if (is_array($rows) && @sizeof($rows) != 0) {
 					foreach ($rows as $row) {
 						$states[$row['uuid']] = $row['toggle'];
@@ -190,6 +210,7 @@ class services {
 			}
 
 			// Build the update array
+			$array = [];
 			$x = 0;
 			foreach($states as $uuid => $state) {
 				// Create the array
@@ -243,6 +264,7 @@ class services {
 		// reloaad the checked services
 		if (is_array($records) && @sizeof($records) != 0) {
 			$services = '';
+			$uuids = [];
 			// Get current reload state
 			foreach($records as $record) {
 				if ($record['checked'] == 'true' && is_uuid($record['uuid'])) {
@@ -253,7 +275,7 @@ class services {
 			if (is_array($uuids) && @sizeof($uuids) != 0) {
 				$sql = "select service_name as name from v_".$this->table." ";
 				$sql .= "where ".$this->name."_uuid in (".implode(', ', $uuids).") ";
-				$rows = $this->database->select($sql, $parameters, 'all');
+				$rows = $this->database->select($sql, null, 'all');
 				if (is_array($rows) && @sizeof($rows) != 0) {
 					foreach ($rows as $row) {
 						$service_name = $row['name'];
@@ -288,43 +310,67 @@ class services {
 	 * This function iterates through all service files found in the application's
 	 * core and app directories, and builds an array of the services
 	 *
+	 * @param bool $details Whether to include details about the service status (default: false)
+	 * @param string $source The source to retrieve services from, either 'database' or 'files' (default: 'database')
+	 *
 	 * @return array Return a list of services with name
 	 */
-	public function get_services($details = false, $source = 'database') {
+	public function get_services($details = false, $source = 'database'): array {
+		$services = [];
 
 		if ($source == 'files') {
+			// Determine the search file name
+			if (stristr(PHP_OS, 'Linux')) {
+				$operating_system = 'debian';
+			}
+			if (stristr(PHP_OS, 'FreeBSD')) {
+				$operating_system = 'freebsd';
+			}
+
 			// Get the list of services
-			$core_files = glob(dirname(__DIR__, 4) . "/core/*/resources/service/*.service");
-			$app_files = glob(dirname(__DIR__, 4) . "/app/*/resources/service/*.service");
+			$core_files = glob(dirname(__DIR__, 4) . "/core/*/resources/service/".$operating_system."/*.service");
+			$app_files = glob(dirname(__DIR__, 4) . "/app/*/resources/service/".$operating_system."/*.service");
 			$service_files = array_merge($core_files, $app_files);
+
+			// Additional files for backwards compatibility
+			if (stristr(PHP_OS, 'Linux')) {
+				$additional_services = glob(dirname(__DIR__, 4) . "/app/*/resources/service/".$operating_system."/debian.service");
+				if (!empty($additional_services)) {
+					$service_files = array_merge($service_files, $additional_services);
+				}
+				$additional_services = glob(dirname(__DIR__, 4) . "/app/*/resources/service/*.service");
+				if (!empty($additional_services)) {
+					$service_files = array_merge($service_files, $additional_services);
+				}
+			}
 
 			// Build the services array
 			$services = [];
-			if (stristr(PHP_OS, 'Linux')) {
-				$i = 0;
-				foreach($service_files as $file) {
-					// Get the service name
-					$service_name = $this->find_service_name($file);
 
-					// Get the service status
-					if ($details) {
-						$service_status = $this->is_running($service_name);
-					}
+			$i = 0;
+			$service_status = [];
+			foreach($service_files as $file) {
+				// Get the service name
+				$service_name = $this->find_service_name($file);
 
-					// Build the services array
-					$services[$i]['name'] = $service_name;
-					$services[$i]['file'] = $file;
-
-					// Add the service status to the array
-					if ($details) {
-						$services[$i]['pid'] = $service_status['pid'];
-						$services[$i]['status'] = $service_status['status'];
-						$services[$i]['etime'] = $service_status['etime'];
-					}
-
-					// Increment
-					$i++;
+				// Get the service status
+				if ($details) {
+					$service_status = $this->is_running($service_name);
 				}
+
+				// Build the services array
+				$services[$i]['name'] = $service_name;
+				$services[$i]['file'] = $file;
+
+				// Add the service status to the array
+				if ($details) {
+					$services[$i]['pid'] = $service_status['pid'];
+					$services[$i]['status'] = $service_status['status'];
+					$services[$i]['etime'] = $service_status['etime'];
+				}
+
+				// Increment
+				$i++;
 			}
 		}
 
@@ -343,31 +389,32 @@ class services {
 			unset($sql, $parameters);
 
 			$services = [];
-			if (stristr(PHP_OS, 'Linux')) {
-				$i = 0;
-				foreach($database_services as $row) {
-					// Get the service status
-					if ($details) {
-						$service_status = $this->is_running($row['service_name']);
-					}
 
-					// Build the services array
-					$services[$i]['name'] = $row['service_name'];
-					$services[$i]['file'] = $row['service_file'];
-					$services[$i]['enabled'] = $row['service_enabled'];
-					//$services[$i]['file'] = $file;
-
-					// Add the service status to the array
-					if ($details) {
-						$services[$i]['pid'] = $service_status['pid'];
-						$services[$i]['status'] = $service_status['status'];
-						$services[$i]['etime'] = $service_status['etime'];
-					}
-
-					// Increment
-					$i++;
+			$i = 0;
+			$service_status = [];
+			foreach($database_services as $row) {
+				// Get the service status
+				if ($details) {
+					$service_status = $this->is_running($row['service_name']);
 				}
+
+				// Build the services array
+				$services[$i]['name'] = $row['service_name'];
+				$services[$i]['file'] = $row['service_file'];
+				$services[$i]['enabled'] = $row['service_enabled'];
+				//$services[$i]['file'] = $file;
+
+				// Add the service status to the array
+				if ($details) {
+					$services[$i]['pid'] = $service_status['pid'];
+					$services[$i]['status'] = $service_status['status'];
+					$services[$i]['etime'] = $service_status['etime'];
+				}
+
+				// Increment
+				$i++;
 			}
+
 		}
 
 		// Return the service array
@@ -386,6 +433,11 @@ class services {
 		// Add multi-lingual support
 		$language = new text;
 		$text = $language->get();
+
+		// Check for existing table - needed for first run when the table may not exist yet during command line upgrade
+		if (!$this->database->table_exists(database::TABLE_PREFIX . $this->table)) {
+			return;
+		}
 
 		// Get the list of services
 		$service_array = $this->get_services(false, 'files');
@@ -418,7 +470,10 @@ class services {
 		unset($sql, $parameters);
 
 		// Create an array to store service names from the database
-		$service_names = array_column($database_services, 'service_name');
+		$service_names = [];
+		if (!empty($database_services)) {
+			$service_names = array_column($database_services, 'service_name');
+		}
 
 		// Add services that are not in the database
 		$service_found = false;
@@ -491,6 +546,8 @@ class services {
 	 * core and app directories, copies each one to /etc/systemd/system, reloads
 	 * the daemon, and enables the service.
 	 *
+	 * @param string $name Service name to upgrade, or 'all' to upgrade all services. (default: 'all')
+	 *
 	 * @return void No return value;
 	 */
 	public function upgrade($name = 'all') {
@@ -527,20 +584,59 @@ class services {
 			$service_name = preg_replace('/[^a-zA-Z0-9_-]/', '', $service['name']);
 
 			// Output to the console
-			if (PHP_SAPI === 'cli') {
-				echo "	".$service_name."\n";
+			if (PHP_SAPI === 'cli' && stristr(PHP_OS, 'Linux')) {
+				echo $service_name."\n";
+			}
+
+			// Set the service file variable from the database if the file exists
+			$service_file = '';
+			if (file_exists($service['file'])) {
+				$service_file = $service['file'];
 			}
 
 			// Upgrade the service
 			if (stristr(PHP_OS, 'Linux')) {
-				system("cp " . escapeshellarg($service['file']) . " /etc/systemd/system/" . escapeshellarg($service['name']) . ".service");
+				// Add previous locations for backwards compatibility
+				$temp_service_file = dirname(__DIR__, 4) . "/app/" . $service_name . "/resources/service/debian.service";
+				if (empty($service_file) && file_exists($temp_service_file)) {
+					$service_file = $temp_service_file;
+				}
+				$temp_service_file = dirname(__DIR__, 4) . "/app/" . $service_name . "/resources/service/" . $service_name . ".service";
+				if (empty($service_file) && file_exists($temp_service_file)) {
+					$service_file = $temp_service_file;
+				}
+
+				// If the service_file is empty then skip this service
+				if (empty($service_file)) {
+					continue;
+				}
+
+				// Install the service
+				system("cp " . escapeshellarg($service_file) . " /etc/systemd/system/" . escapeshellarg($service_name) . ".service");
 				system("systemctl daemon-reload");
-				system("systemctl enable " . escapeshellarg($service['name']));
-				system("systemctl start " . escapeshellarg($service['name']));
+				system("systemctl enable " . escapeshellarg($service_name));
+				system("systemctl start " . escapeshellarg($service_name));
 			}
 			if (stristr(PHP_OS, 'BSD')) {
 				if ($service['enabled'] == 'true') {
-					system("service ".escapeshellarg($service['name']). "start");
+					// Add previous locations for backwards compatibility
+					$temp_service_file = dirname(__DIR__, 4) . "/app/" . $service_name . "/resources/service/freebsd.service";
+					if (empty($service_file) && file_exists($temp_service_file)) {
+						$service_file = $temp_service_file;
+					}
+
+					// If the service_file is empty then skip this service
+					if (empty($service_file)) {
+						continue;
+					}
+
+					// Install the service
+					system("cp " . $service_file . " /usr/local/etc/rc.d/".$service_name);
+					system("sysrc " . $service_name . "_enable=\"YES\"");
+					system("chmod 755 /usr/local/etc/rc.d/" . $service_name);
+
+					// Start the service
+					system("service ".escapeshellarg(service_name). "start");
 				}
 			}
 		}
@@ -553,7 +649,8 @@ class services {
 	 * This function iterates over all service files, extracts the service names,
 	 * and starts each service.
 	 *
-	 * @param string $name Service name to start, or 'all' to start all services
+	 * @param string $name Service name to start, or 'all' to start all services. (default: 'all')
+	 *
 	 * @return void
 	 */
 	public function start($name = 'all') {
@@ -590,8 +687,8 @@ class services {
 			$service_name = preg_replace('/[^a-zA-Z0-9_-]/', '', $service['name']);
 
 			// Output to the console
-			if (PHP_SAPI === 'cli') {
-				echo "	".$service_name."\n";
+			if (PHP_SAPI === 'cli' && stristr(PHP_OS, 'Linux')) {
+				echo $service_name."\n";
 			}
 
 			// Run the start command
@@ -608,6 +705,8 @@ class services {
 	 * Restarts all services
 	 *
 	 * This function restarts all core and app services.
+	 *
+	 * @param string $name Service name to restart, or 'all' to restart all services. (default: 'all')
 	 *
 	 * @return void No return value;
 	 */
@@ -645,8 +744,8 @@ class services {
 			$service_name = preg_replace('/[^a-zA-Z0-9_-]/', '', $service['name']);
 
 			// Output to the console
-			if (PHP_SAPI === 'cli') {
-				echo "	".$service_name."\n";
+			if (PHP_SAPI === 'cli' && stristr(PHP_OS, 'Linux')) {
+				echo $service_name."\n";
 			}
 
 			// Run the restart command
@@ -654,7 +753,7 @@ class services {
 				system("systemctl restart ".escapeshellarg($service_name));
 			}
 			if (stristr(PHP_OS, 'BSD')) {
-				system("service ".escapeshellarg(service_name). "restart");
+				system("service ".escapeshellarg($service_name). "restart");
 			}
 		}
 	}
@@ -664,6 +763,8 @@ class services {
 	 *
 	 * This function iterates over all service files, extracts the service names,
 	 * and stops each service.
+	 *
+	 * @param string $name Service name to stop, or 'all' to stop all services. (default: 'all')
 	 *
 	 * @return void No return value;
 	 */
@@ -696,8 +797,8 @@ class services {
 			$service_name = preg_replace('/[^a-zA-Z0-9_-]/', '', $service['name']);
 
 			// Output to the console
-			if (PHP_SAPI === 'cli') {
-				echo "	".$service_name."\n";
+			if (PHP_SAPI === 'cli' && stristr(PHP_OS, 'Linux')) {
+				echo $service_name."\n";
 			}
 
 			// Run the stop command
@@ -718,13 +819,23 @@ class services {
 	 * @return string|null The service name if found, otherwise an empty string.
 	 */
 	public function find_service_name(string $file) {
-		$parsed = parse_ini_file($file);
-		$exec_cmd = $parsed['ExecStart'];
-		$parts = explode(' ', $exec_cmd);
-		$php_file = $parts[1] ?? '';
-		if (!empty($php_file)) {
-			$path_info = pathinfo($php_file);
-			return $path_info['filename'];
+		if (stristr(PHP_OS, 'Linux')) {
+			$parsed = parse_ini_file($file);
+			$exec_cmd = $parsed['ExecStart'];
+			$parts = explode(' ', $exec_cmd);
+			$php_file = $parts[1] ?? '';
+			if (!empty($php_file)) {
+				$path_info = pathinfo($php_file);
+				return $path_info['filename'];
+			}
+		}
+		if (stristr(PHP_OS, 'FreeBSD')) {
+			$service_content = file_get_contents($file);
+			if (preg_match('/^\s*name\s*=\s*["\']([^"\']+)["\']\s*$/m', $service_content, $name_matches)) {
+				if (!empty($name_matches[1])) {
+					return $name_matches[1];
+				}
+			}
 		}
 		return '';
 	}
@@ -767,7 +878,7 @@ class services {
 	 * @return array An array containing information about the process's status,
 	 *               including whether it's status, its PID, and how long it's been running.
 	 */
-	public function is_running(string $name) {
+	public function is_running(string $name): array {
 		$name = escapeshellarg($name);
 		$command = "ps -aux | grep $name | grep -v grep | awk '{print \$2}' | head -n 1";
 		$pid = trim(shell_exec($command ?? ''));
@@ -776,7 +887,7 @@ class services {
 			$etime = trim(shell_exec($command) ?? '');
 			return ['status' => true, 'pid' => $pid, 'etime' => $etime];
 		}
-		return ['status' => false, 'pid' => $pid, 'etime' => $etime];
+		return ['status' => false, 'pid' => $pid, 'etime' => null];
 	}
 
 	/**
@@ -794,7 +905,7 @@ class services {
 	 *
 	 * @return string Formatted time duration string in human-readable format.
 	 */
-	public function format_etime($etime) {
+	public function format_etime($etime): string {
 		// Format: [[dd-]hh:]mm:ss
 		if (empty($etime)) return '-';
 
