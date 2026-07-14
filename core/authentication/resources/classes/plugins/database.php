@@ -72,7 +72,7 @@ class plugin_database {
 		$theme_background_video = (isset($background_videos[0])) ? $background_videos[0] : '';
 		$login_domain_name_visible = $settings->get('login', 'domain_name_visible', false);
 		$login_domain_name = $settings->get('login', 'domain_name');
-		$login_remember_me = $settings->get('login', 'remember_me', true);
+		$login_remember_me = $settings->get('login', 'remember_me');
 		$login_destination = $settings->get('login', 'destination');
 		$users_unique = $settings->get('users', 'unique', '');
 
@@ -308,12 +308,14 @@ class plugin_database {
 					$sql .= " c.contact_name_family, ";
 					$sql .= " a.contact_attachment_uuid ";
 					$sql .= "from v_contacts as c ";
-					$sql .= "left join v_contact_attachments as a on c.contact_uuid = a.contact_uuid ";
+					$sql .= "left join v_contact_attachments as a on ( \n";
+					$sql .= "	c.contact_uuid = a.contact_uuid  \n";
+					$sql .= "	and a.attachment_primary = true  \n";
+					$sql .= "	and a.attachment_filename is not null  \n";
+					$sql .= "	and a.attachment_content is not null \n";
+					$sql .= ") \n";
 					$sql .= "where c.contact_uuid = :contact_uuid ";
 					$sql .= "and c.domain_uuid = :domain_uuid ";
-					$sql .= "and a.attachment_primary = true ";
-					$sql .= "and a.attachment_filename is not null ";
-					$sql .= "and a.attachment_content is not null ";
 					$parameters['domain_uuid']  = $this->domain_uuid;
 					$parameters['contact_uuid'] = $this->contact_uuid;
 					$contact = $settings->database()->select($sql, $parameters, 'row');
@@ -402,5 +404,3 @@ class plugin_database {
 
 	}
 }
-
-

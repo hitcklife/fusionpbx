@@ -19,7 +19,6 @@
 	Mark J Crane <markjcrane@fusionpbx.com>
 	Portions created by the Initial Developer are Copyright (C) 2008-2026
 	the Initial Developer. All Rights Reserved.
-
 */
 
 //includes files
@@ -32,6 +31,9 @@
 		exit;
 	}
 
+//define global variable(s)
+	global $database;
+
 //add multi-lingual support
 	$language = new text;
 	$text = $language->get();
@@ -39,7 +41,7 @@
 //set the defaults
 	$device_model = '';
 	$device_firmware_version = '';
-	$device_template ='';
+	$device_template = '';
 
 //get the domain values
 	$domain_uuid = $_SESSION['domain_uuid'] ?? '';
@@ -523,10 +525,9 @@
 
 				//write the provision files
 					if (!empty($settings->get('provision', 'path'))) {
-						$prov = new provision(['settings' => $settings]);
-						$prov->domain_uuid = $domain_uuid;
+						$prov = new provision(['settings'=>$settings, 'domain_uuid'=>$domain_uuid, 'domain_name'=>$domain_name, 'user_uuid'=>$_SESSION['user_uuid']]);
 						$prov->device_uuid = $device_uuid;
-						$response = $prov->write();
+						$prov->write();
 					}
 
 				//set the message
@@ -794,7 +795,7 @@
 			if ($_SERVER['HTTPS'] == 'on') { $_SERVER['HTTP_PROTOCOL'] = 'https'; }
 			if ($_SERVER['SERVER_PORT'] == '443') { $_SERVER['HTTP_PROTOCOL'] = 'https'; }
 		}
-		echo "		window.location = '".$_SERVER['HTTP_PROTOCOL']."://".$provision_domain_name.PROJECT_PATH."/app/provision/index.php?address=".escape($device_address ?? '')."&file=' + d + '&content_type=application/octet-stream';\n";
+		echo "		window.location = '".$_SERVER['HTTP_PROTOCOL']."://".$provision_domain_name.PROJECT_PATH."/app/provision/index.php?address=".urlencode($device_address ?? '')."&file=' + d + '&content_type=application/octet-stream';\n";
 		echo "	}\n";
 
 		echo "\n";
@@ -976,7 +977,7 @@
 			if ($settings->get('provision', 'http_auth_enabled', true) && !empty($http_auth_username) && !empty($http_auth_password)) {
 				$auth_string = $http_auth_username.':'.$http_auth_password.'@';
 			}
-			$content = "https://".$auth_string.$provision_domain_name.'/app/provision/index.php?address='.$device_address;
+			$content = "https://".$auth_string.$provision_domain_name.'/app/provision/index.php?address='.urlencode($device_address);
 		}
 
 		//stream the file
@@ -1080,8 +1081,7 @@
 		}
 		if (permission_exists("device_files")) {
 			//get the template directory
-				$prov = new provision(['settings' => $settings]);
-				$prov->domain_uuid = $domain_uuid;
+				$prov = new provision(['settings'=>$settings, 'domain_uuid'=>$domain_uuid, 'domain_name'=>$domain_name, 'user_uuid'=>$_SESSION['user_uuid']]);
 				$template_dir = $prov->template_dir;
 				$files = glob($template_dir.'/'.$device_template.'/*');
 			//add file buttons and the file list
@@ -1090,12 +1090,14 @@
 				echo "			<option value=''>".$text['label-download']."</option>\n";
 				foreach ($files as $file) {
 					//format the device address
-						$address = $prov->format_address($device_address, $device_vendor);
+					$address = $prov->format_address($device_address, $device_vendor);
+
 					//render the file name
-						$file_name = str_replace("{\$address}", $address, basename($file));
-						$file_name = str_replace("{\$mac}", $address, basename($file_name));
+					$file_name = str_replace("{\$address}", $address, basename($file));
+					$file_name = str_replace("{\$mac}", $address, basename($file_name));
+
 					//add the select option
-						echo "		<option value='".basename($file)."'>".$file_name."</option>\n";
+					echo "		<option value='".basename($file)."'>".$file_name."</option>\n";
 				}
 				echo "		</select>";
 				unset($button_margin);
@@ -1677,7 +1679,7 @@
 				}
 
 			//show all the rows in the array
-				echo "<tr class='".(is_uuid($row["device_key_uuid"]) ? 'draggable' : null)."' data-key-uuid='".$row['device_key_uuid']."'>\n";
+				echo "<tr class='".(!empty($row['device_key_uuid']) && is_uuid($row["device_key_uuid"]) ? 'draggable' : null)."' data-key-uuid='".escape($row['device_key_uuid'] ?? '')."'>\n";
 				echo "<td valign='top' align='left' nowrap='nowrap'>\n";
 				echo "	<select class='formfld' name='device_keys[".$x."][device_key_category]'>\n";
 				echo "	<option value=''></option>\n";
@@ -1822,7 +1824,7 @@
 					}
 				}
 				echo "				</td>\n";
-				if (is_uuid($row["device_key_uuid"])) {
+				if (!empty($row["device_key_uuid"]) && is_uuid($row["device_key_uuid"])) {
 					echo "			<td class='vtable' style='text-align: center;'>\n";
 					echo "				<span class='drag_handle' style='color: #00000055; cursor: grab;'><i class='fa-solid fa-grip-lines' style='width: 15px;'></i></span>\n";
 					echo "			</td>\n";
@@ -2056,7 +2058,7 @@
 		if (empty($label)) { $label = $device_alternate[0]['device_address']; }
 		echo "	<table>\n";
 		echo "	<tr>\n";
-		echo "		<td><a href='?id=".escape($device_uuid_alternate)."' id='device_uuid_alternate_link'>".escape($label)."</a><input class='formfld' type='hidden' name='device_uuid_alternate' id='device_uuid_alternate' maxlength='255' value=\"".escape($device_uuid_alternate)."\" />&nbsp;</td>";
+		echo "		<td><a href='?id=".urlencode($device_uuid_alternate)."' id='device_uuid_alternate_link'>".escape($label)."</a><input class='formfld' type='hidden' name='device_uuid_alternate' id='device_uuid_alternate' maxlength='255' value=\"".escape($device_uuid_alternate)."\" />&nbsp;</td>";
 		echo "		<td><a href='#' onclick=\"if (confirm('".$text['confirm-delete']."')) { document.getElementById('device_uuid_alternate').value = ''; document.getElementById('device_uuid_alternate_link').hidden = 'true'; submit_form(); }\" alt='".$text['button-delete']."'>$v_link_label_delete</a></td>\n";
 		echo "	</tr>\n";
 		echo "	</table>\n";

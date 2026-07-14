@@ -92,7 +92,7 @@ class plugin_email {
 		$theme_background_video  = (isset($background_videos) && is_array($background_videos)) ? $background_videos[0] : null;
 		//$login_domain_name_visible = $settings->get('login', 'domain_name_visible');
 		//$login_domain_name = $settings->get('login', 'domain_name');
-		$login_remember_me = $settings->get('login', 'remember_me', true);
+		$login_remember_me = $settings->get('login', 'remember_me');
 		$login_destination = $settings->get('login', 'destination');
 		$users_unique = $settings->get('users', 'unique', '');
 
@@ -286,11 +286,11 @@ class plugin_email {
 			$email_body = str_replace('${auth_code}', $_SESSION["user"]["authentication"]["email"]["code"], $email_body);
 
 			//get the email from name and address
-			$email_from_address = $_SESSION['email']['smtp_from']['text'];
-			$email_from_name = $_SESSION['email']['smtp_from_name']['text'];
+			$email_from_address = $settings->get('email', 'smtp_from');
+			$email_from_name = $settings->get('email', 'smtp_from_name');
 
 			//get the email send mode options: direct or email_queue
-			$email_send_mode = $_SESSION['authentication']['email_send_mode']['text'] ?? 'email_queue';
+			$email_send_mode = $settings->get('authentication', 'email_send_mode', 'email_queue');
 
 			//send the email
 			if ($email_send_mode == 'email_queue') {

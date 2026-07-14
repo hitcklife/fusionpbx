@@ -670,10 +670,34 @@
 //get the ivr menus
 	$sql = "select * from v_ivr_menus ";
 	$sql .= "where domain_uuid = :domain_uuid ";
-	$sql .= "order by v_ivr_menus asc ";
+	$sql .= "order by ivr_menu_name asc ";
 	$parameters['domain_uuid'] = $_SESSION['domain_uuid'];
 	$ivr_menus = $database->select($sql, $parameters, 'all');
 	unset($sql, $parameters);
+
+// Get all descendants of the current menu to prevent circular parent assignment
+	$children_uuids = [];
+	if (!empty($ivr_menu_uuid)) {
+		$sql = "with recursive children as ( ";
+		$sql .= "	select ivr_menu_uuid ";
+		$sql .= "	from v_ivr_menus ";
+		$sql .= "	where ivr_menu_parent_uuid = :ivr_menu_uuid ";
+		$sql .= "	union all ";
+		$sql .= "	select child.ivr_menu_uuid ";
+		$sql .= "	from v_ivr_menus as child ";
+		$sql .= "	join children c on child.ivr_menu_parent_uuid = c.ivr_menu_uuid ";
+		$sql .= ") ";
+		$sql .= "select ivr_menu_uuid from children ";
+		$parameters['ivr_menu_uuid'] = $ivr_menu_uuid;
+		$descendants = $database->select($sql, $parameters, 'all');
+		unset($sql, $parameters);
+
+		if (!empty($descendants)) {
+			foreach ($descendants as $desc) {
+				$children_uuids[] = $desc['ivr_menu_uuid'];
+			}
+		}
+	}
 
 //add an empty row to the options array
 	if (count($ivr_menu_options) == 0) {
@@ -926,26 +950,29 @@
 	echo "</td>\n";
 	echo "</tr>\n";
 
-	echo "	<tr>";
-	echo "		<td class='vncell'>".$text['label-ivr_menu_parent_uuid']."</td>";
-	echo "		<td class='vtable'>";
-	echo "<select name=\"ivr_menu_parent_uuid\" class='formfld'>\n";
-	echo "<option value=\"\"></option>\n";
+	echo "<tr>";
+	echo "	<td class='vncell'>".$text['label-ivr_menu_parent_uuid']."</td>";
+	echo "	<td class='vtable'>";
+	echo "		<select name=\"ivr_menu_parent_uuid\" class='formfld'>\n";
+	echo "			<option value=\"\"></option>\n";
 	if (!empty($ivr_menus)) {
 		foreach($ivr_menus as $field) {
-			if ($field['ivr_menu_uuid'] != $ivr_menu_uuid) {
-				if (!empty($ivr_menu_parent_uuid) && $ivr_menu_parent_uuid == $field['ivr_menu_uuid']) {
-					echo "<option value='".escape($field['ivr_menu_uuid'])."' selected='selected'>".escape($field['ivr_menu_name'])."</option>\n";
-				}
-				else {
-					echo "<option value='".escape($field['ivr_menu_uuid'])."'>".escape($field['ivr_menu_name'])."</option>\n";
-				}
+			// Exclude current menu and its descendants to prevent loops
+			if ($field['ivr_menu_uuid'] == $ivr_menu_uuid || in_array($field['ivr_menu_uuid'], $children_uuids)) {
+				continue;
+			}
+
+			if (!empty($ivr_menu_parent_uuid) && $ivr_menu_parent_uuid == $field['ivr_menu_uuid']) {
+				echo "<option value='".escape($field['ivr_menu_uuid'])."' selected='selected'>".escape($field['ivr_menu_name'])."</option>\n";
+			}
+			else {
+				echo "<option value='".escape($field['ivr_menu_uuid'])."'>".escape($field['ivr_menu_name'])."</option>\n";
 			}
 		}
 	}
-	echo "</select>";
-	echo "		</td>";
-	echo "	</tr>";
+	echo "		</select>";
+	echo "	</td>";
+	echo "</tr>";
 
 	echo "<tr>\n";
 	echo "<td class='vncell' valign='top' align='left' nowrap>\n";

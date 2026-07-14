@@ -37,14 +37,6 @@ class xml_cdr {
 	const app_category = 'switch';
 
 	/**
-	 * Domain UUID set in the constructor. This can be passed in through the $settings_array associative array or set
-	 * in the session global array
-	 *
-	 * @var string
-	 */
-	public $domain_uuid;
-
-	/**
 	 * declare public variables
 	 */
 	public $array;
@@ -86,6 +78,14 @@ class xml_cdr {
 	private $settings;
 
 	/**
+	 * Domain UUID set in the constructor. This can be passed in through the $settings_array associative array or set
+	 * in the session global array
+	 *
+	 * @var string
+	 */
+	private $domain_uuid;
+
+	/**
 	 * User UUID set in the constructor. This can be passed in through the $settings_array associative array or set in
 	 * the session global array
 	 *
@@ -124,7 +124,7 @@ class xml_cdr {
 	private $json;
 
 	/**
-	 * Initializes the object with setting array.
+	 * Initializes the object with the setting array.
 	 *
 	 * @param array $setting_array An array containing settings for domain, user, and database connections. Defaults to
 	 *                             an empty array.
@@ -133,8 +133,8 @@ class xml_cdr {
 	 */
 	public function __construct(array $setting_array = []) {
 		//set domain and user UUIDs
-		$this->domain_uuid = $setting_array['domain_uuid'] ?? $_SESSION['domain_uuid'] ?? '';
-		$this->user_uuid   = $setting_array['user_uuid'] ?? $_SESSION['user_uuid'] ?? '';
+		$this->domain_uuid = $setting_array['domain_uuid'] ?? '';
+		$this->user_uuid   = $setting_array['user_uuid'] ?? '';
 
 		//set objects
 		$this->database = $setting_array['database'] ?? database::new();
@@ -316,7 +316,6 @@ class xml_cdr {
 			//save the call details record to the database
 			$this->database->app_name = 'xml_cdr';
 			$this->database->app_uuid = '4a085c51-7635-ff03-f67b-86e834422848';
-			//$this->database->domain_uuid = $domain_uuid;
 			$response = $this->database->save($this->array, false);
 			if ($response['code'] == '200') {
 				//delete the file after it is saved to the database
@@ -700,6 +699,7 @@ class xml_cdr {
 
 			//update the settings object when the domain changes
 			if ($this->domain_uuid != $domain_uuid) {
+				$this->domain_uuid = $domain_uuid;
 				$this->settings = new settings(['database' => $this->database, 'domain_uuid' => $domain_uuid]);
 			}
 
@@ -1868,6 +1868,9 @@ class xml_cdr {
 		//set the time zone for php
 		date_default_timezone_set($time_zone);
 
+		//define the variable
+		$sql_date_range = '';
+
 		//build the date range
 		if ((!empty($this->start_stamp_begin) && strlen($this->start_stamp_begin) > 0) || !empty($this->start_stamp_end)) {
 			unset($this->quick_select);
@@ -2124,7 +2127,7 @@ class xml_cdr {
 			return;
 		}
 
-		//check for a valid uuid
+		//check for a valid UUID
 		if (!is_uuid($this->recording_uuid)) {
 			//echo "invalid uuid";
 			return;
@@ -2133,6 +2136,10 @@ class xml_cdr {
 		//get call recording from database
 		$sql = "select record_name, record_path from v_xml_cdr ";
 		$sql .= "where xml_cdr_uuid = :xml_cdr_uuid ";
+		if (!permission_exists('xml_cdr_all')) {
+			$sql .= "and domain_uuid = :domain_uuid ";
+			$parameters['domain_uuid'] = $this->domain_uuid;
+		}
 		$parameters['xml_cdr_uuid'] = $this->recording_uuid;
 		$row = $this->database->select($sql, $parameters, 'row');
 		if (!empty($row) && is_array($row)) {

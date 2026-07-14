@@ -96,7 +96,9 @@ if (!function_exists('check_str')) {
 	 * @internal Use parameterized queries
 	 */
 	function check_str($string, $trim = true) {
+		//set global variables
 		global $db_type, $db;
+
 		//when code in db is urlencoded the ' does not need to be modified
 		if ($db_type == "sqlite") {
 			if (function_exists('sqlite_escape_string')) {
@@ -137,26 +139,26 @@ if (!function_exists('check_cidr')) {
 	 */
 	function check_cidr($cidr, string $ip_address): bool {
 
-		//no cidr restriction
+		// No CIDR restriction
 		if (empty($cidr)) {
 			return true;
 		}
 
-		//check to see if the user's remote address is in the cidr array
+		// Check to see if the user's remote address is in the CIDR array
 		if (is_array($cidr)) {
-		    	//cidr is an array
+		    // CIDR is an array
 			foreach ($cidr as $value) {
 				if (check_cidr($value, $ip_address)) {
 					return true;
 				}
 			}
 		} else {
-			//cidr is a string
+			// CIDR is a string
 			[$subnet, $mask] = explode('/', $cidr);
 			return (ip2long($ip_address) & ~((1 << (32 - $mask)) - 1)) == ip2long($subnet);
 		}
 
-		//value not found in cidr
+		// Value not found in CIDR
 		return false;
 	}
 }
@@ -1065,10 +1067,11 @@ function format_string(string $format, string $data): string {
  * @return string|null The formatted phone number if the input matches any defined format, otherwise the original input.
  */
 function format_phone(?string $phone_number): ?string {
+	global $settings;
 	if (is_numeric(trim($phone_number ?? '', ' +'))) {
-		if (isset($_SESSION["format"]["phone"])) {
+		if (!empty($settings->get('format', 'phone'))) {
 			$phone_number = trim($phone_number, ' +');
-			foreach ($_SESSION["format"]["phone"] as $format) {
+			foreach ($settings->get('format', 'phone') as $format) {
 				$format_count = substr_count($format, 'x');
 				$format_count = $format_count + substr_count($format, 'R');
 				$format_count = $format_count + substr_count($format, 'r');
@@ -2555,20 +2558,20 @@ function event_socket_mkdir($dir) {
 
 /**
 * Escape the user data
-* <p>Escapes all characters that have HTML character entity
+* <p>Escapes & " ' < and > characters</p>
 * @param string $string the value to escape
 * @return string
-* @link https://www.php.net/htmlentities
+* @link https://www.php.net/htmlspecialchars
 */
 function escape($string) {
 	if (is_string($string)) {
-		return htmlentities($string, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+		return htmlspecialchars($string, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 	} elseif (is_numeric($string)) {
 		return $string;
 	} else {
 		$string = (array) $string;
 		if (isset($string[0])) {
-			return htmlentities($string[0], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+			return htmlspecialchars($string[0], ENT_QUOTES | ENT_HTML5, 'UTF-8');
 		}
 	}
 	return false;

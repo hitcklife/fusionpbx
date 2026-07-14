@@ -28,6 +28,14 @@
 class message {
 
 	/**
+	 * Define constants for mood
+	 *
+	 */
+    const mood_positive = 'positive';
+    const mood_negative = 'negative';
+    const mood_alert = 'alert';
+
+	/**
 	 * Returns the total number of messages in the session.
 	 *
 	 * @return int The number of messages, or 0 if no messages are present in the session.
@@ -70,16 +78,19 @@ class message {
 	 * Adds a message to the session messages array.
 	 *
 	 * @param string      $message The message to add.
-	 * @param string|null $mood    The mood of the message. Defaults to 'positive'.
+	 * @param string|null $mood    The mood of the message. Options: positive, negative, alert. Default: positive
 	 * @param int|null    $delay   The delay before displaying the message. Defaults to the theme's default text
 	 *                             message delay in milliseconds.
 	 *
 	 * @return void
 	 */
 	static function add($message, $mood = null, $delay = null) {
+		//set the global variables
+		global $settings;
+
 		//set mood and delay
 		$mood = $mood ?: 'positive';
-		$delay = $delay ?: (1000 * (float)$_SESSION['theme']['message_delay']['text']);
+		$delay = $delay ?: (1000 * (float)$settings->get('theme', 'message_delay', '3'));
 		//ignore duplicate messages
 		if (isset($_SESSION["messages"]) && !empty($_SESSION["messages"][$mood]['message'])) {
 			if (!in_array($message, $_SESSION["messages"][$mood]['message'])) {
