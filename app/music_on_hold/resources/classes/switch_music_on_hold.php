@@ -200,13 +200,13 @@ class switch_music_on_hold {
 	 */
 	public function get() {
 		//get moh records, build array
-		$sql                       = "select ";
-		$sql                       .= "d.domain_name, ";
-		$sql                       .= "m.* ";
-		$sql                       .= "from v_music_on_hold as m ";
-		$sql                       .= "left join v_domains as d on d.domain_uuid = m.domain_uuid ";
-		$sql                       .= "where (m.domain_uuid = :domain_uuid or m.domain_uuid is null) ";
-		$sql                       .= "order by m.domain_uuid desc, music_on_hold_name asc, music_on_hold_rate asc ";
+		$sql = "select ";
+		$sql .= "d.domain_name, ";
+		$sql .= "m.* ";
+		$sql .= "from v_music_on_hold as m ";
+		$sql .= "left join v_domains as d on d.domain_uuid = m.domain_uuid ";
+		$sql .= "where (m.domain_uuid = :domain_uuid or m.domain_uuid is null) ";
+		$sql .= "order by m.domain_uuid desc, music_on_hold_name asc, music_on_hold_rate asc ";
 		$parameters['domain_uuid'] = $this->domain_uuid;
 		return $this->database->select($sql, $parameters, 'all');
 	}
@@ -214,24 +214,28 @@ class switch_music_on_hold {
 	/**
 	 * Reloads the module and establishes a connection to the Event Socket.
 	 */
-	public function reload() {
+	public function reload($stream_name) {
 		//add multi-lingual support
 		$language = new text;
-		$text     = $language->get();
+		$text = $language->get();
 
 		//if the handle does not exist create it
 		$esl = event_socket::create();
 
-		//if the handle still does not exist show an error message
+		//if the handle still does not exist
 		if (!$esl->is_connected()) {
-			$msg = "<div align='center'>" . $text['message-event-socket'] . "<br /></div>";
+		 	return;
 		}
 
 		//send the api command to check if the module exists
 		if ($esl->is_connected()) {
-			$cmd           = "reload mod_local_stream";
-			$switch_result = event_socket::api($cmd);
-			unset($cmd);
+			$switch_command = "local_stream start ".escapeshellarg($stream_name);
+			$switch_result = event_socket::api($switch_command);
+			unset($switch_result, $switch_command);
+
+			$switch_command = "local_stream reload ".escapeshellarg($stream_name);
+			$switch_result = event_socket::api($switch_command);
+			unset($switch_result, $switch_command);
 		}
 	}
 
@@ -263,7 +267,7 @@ class switch_music_on_hold {
 		fclose($fout);
 
 		//reload the XML
-		$this->reload();
+		//$this->reload();
 	}
 
 	/**
@@ -341,8 +345,6 @@ class switch_music_on_hold {
 		$p = permissions::new();
 		$p->add('music_on_hold_add', 'temp');
 
-		$this->database->app_name = 'music_on_hold';
-		$this->database->app_uuid = '1dafe0f8-c08a-289b-0312-15baf4f20f81';
 		$this->database->save($array);
 		//echo $this->database->message;
 		unset($array);
@@ -364,7 +366,7 @@ class switch_music_on_hold {
 
 			//add multi-lingual support
 			$language = new text;
-			$text     = $language->get();
+			$text = $language->get();
 
 			//validate the token
 			$token = new token;
@@ -474,7 +476,7 @@ class switch_music_on_hold {
 					$cache->delete("configuration:local_stream.conf");
 
 					//reload moh
-					$this->reload();
+					//$this->reload();
 
 					//set message
 					message::add($text['message-delete']);
