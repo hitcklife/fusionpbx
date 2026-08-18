@@ -45,6 +45,7 @@
 //set the defaults
 	$queue_name = '';
 	$queue_extension = '';
+	$queue_limit = '';
 	$queue_time_base_score_sec = '';
 	$queue_cid_prefix = '';
 	$queue_announce_frequency = '';
@@ -550,7 +551,10 @@
 
 		//synchronize the configuration
 			save_call_center_xml();
-			remove_config_from_cache('configuration:callcenter.conf');
+
+		//clear the cache
+			$cache->delete(gethostname() . ':' . 'configuration:callcenter.conf');
+			$cache->delete('configuration:callcenter.conf');
 
 		//add agent/tier to queue
 			$agent_name = $_POST["agent_name"] ?? null;
@@ -560,6 +564,7 @@
 			if (!empty($agent_name)) {
 				//setup the event socket connection
 					$esl = event_socket::create();
+
 				//add the agent using event socket
 					if ($esl->is_connected()) {
 						/* syntax:
@@ -589,20 +594,13 @@
 					}
 			}
 
-		//syncrhonize configuration
-			save_call_center_xml();
-
-		//clear the cache
-			$cache = new cache;
-			$cache->delete('configuration:callcenter.conf');
-
 		//redirect the user
 			if (is_uuid($call_center_queue_uuid)) {
 				header("Location: call_center_queue_edit.php?id=".urlencode($call_center_queue_uuid).($query_string ? '&'.$query_string : ''));
 			}
 			return;
 
-	} //(count($_POST)>0 && empty($_POST["persistformvar"]))
+	} //(count($_POST) > 0 && empty($_POST["persistformvar"]))
 
 //pre-populate the form
 	if (!empty($_GET) && is_uuid($_GET["id"]) && empty($_POST["persistformvar"])) {

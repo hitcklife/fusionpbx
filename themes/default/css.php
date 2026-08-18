@@ -1138,9 +1138,7 @@ else { //default: white
 		z-index: 6;
 		display: none;
 		position: absolute;
-		<?php if ($menu_style != 'inline') { ?>
-			top: 50px;
-		<?php } ?>
+		/* top: specified in /resources/classes/menu.php */
 		/* right: specified in /resources/classes/menu.php */
 		padding: 15px;
 		background-color: <?=$body_header_background_color?>;
@@ -1158,7 +1156,7 @@ else { //default: white
 	@media (max-width: 575.98px) {
 		div#body_header_user_menu {
 			width: calc(100% - 20px);
-			/* right: specified in /resources/classes/menu.php */
+			right: 10px !important;
 			}
 		}
 
@@ -3537,7 +3535,6 @@ else { //default: white
 		float: right;
 		white-space: normal;
 		overflow-wrap: break-word;
-		overflow: hidden;
 		}
 
 	div.action_bar > div.actions > div.unsaved {
@@ -4162,7 +4159,8 @@ else { //default: white
 		border-top: none;
 		box-shadow: 0 4px 8px rgba(0,0,0,0.12);
 		z-index: 4;
-		width: 100%;
+		min-width: 100%;
+		width: max-content;
 		max-height: 300px;
 		overflow-y: auto;
 		box-sizing: border-box;
@@ -4173,7 +4171,6 @@ else { //default: white
 	}
 
 	.domain-search-results {
-		position: fixed;
 		z-index: 1000;
 	}
 
@@ -4210,7 +4207,7 @@ else { //default: white
 		position: absolute;
 		top: 0;
 		right: 0;
-		padding: 4px 6px;
+		padding: 1px 4px 0 4px;
 		gap: 6px;
 		height: 100%;
 		display: flex;
