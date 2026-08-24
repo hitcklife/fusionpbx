@@ -59,7 +59,7 @@
 	local hex_to_char = function(x)
 		return string.char(tonumber(x, 16))
 	end
-	
+
 	--define url_decode function
 	local url_decode = function(url)
 		return url:gsub("%%(%x%x)", hex_to_char)
@@ -111,6 +111,103 @@
 
 	end
 
+--check the missed calls
+	function missed()
+		--add missed call channel variable
+			if (session) then
+				session:setVariable("missed_call", 'true');
+			end
+
+		--send missed call email
+		if (missed_call_app ~= nil and missed_call_data ~= nil) then
+			if (missed_call_app == "email") then
+				--prepare the email address
+					mail_to = missed_call_data;
+
+				--set the sounds path for the language, dialect and voice
+					default_language = session:getVariable("default_language");
+					default_dialect = session:getVariable("default_dialect");
+					default_voice = session:getVariable("default_voice");
+					if (not default_language) then default_language = 'en'; end
+					if (not default_dialect) then default_dialect = 'us'; end
+					if (not default_voice) then default_voice = 'callie'; end
+
+				--predefine the variables
+					subject = '';
+					body = '';
+
+				--get the templates
+					local sql = "SELECT * FROM v_email_templates ";
+					sql = sql .. "WHERE (domain_uuid = :domain_uuid or domain_uuid is null) ";
+					sql = sql .. "AND template_language = :template_language ";
+					sql = sql .. "AND template_category = 'missed' ";
+					sql = sql .. "AND template_enabled = true ";
+					sql = sql .. "ORDER BY domain_uuid DESC ";
+					local params = {domain_uuid = domain_uuid, template_language = default_language.."-"..default_dialect};
+					if (debug["sql"]) then
+						freeswitch.consoleLog("notice", "[voicemail] SQL: " .. sql .. "; params:" .. json.encode(params) .. "\n");
+					end
+					dbh = Database.new('system');
+					dbh:query(sql, params, function(row)
+						subject = row["template_subject"];
+						body = row["template_body"];
+					end);
+
+				--prepare the headers
+					local headers = {
+						["X-FusionPBX-Domain-UUID"] = domain_uuid;
+						["X-FusionPBX-Domain-Name"] = domain_name;
+						["X-FusionPBX-Call-UUID"]   = uuid;
+						["X-FusionPBX-Email-Type"]  = 'missed';
+					}
+
+				--remove quotes from caller id name and number
+					caller_id_name = caller_id_name:gsub("'", "&#39;");
+					caller_id_name = caller_id_name:gsub([["]], "&#34;");
+					caller_id_number = caller_id_number:gsub("'", "&#39;");
+					caller_id_number = caller_id_number:gsub([["]], "&#34;");
+
+				--prepare the subject
+					subject = subject:gsub("${caller_id_name}", caller_id_name);
+					subject = subject:gsub("${caller_id_number}", caller_id_number);
+					subject = subject:gsub("${ring_group_name}", ring_group_name);
+					subject = subject:gsub("${ring_group_extension}", ring_group_extension);
+					subject = subject:gsub("${sip_to_user}", ring_group_name);
+					subject = subject:gsub("${dialed_user}", ring_group_extension);
+					subject = subject:gsub("${destination_number}", destination_number);
+					subject = trim(subject);
+					subject = '=?utf-8?B?'..base64.encode(subject)..'?=';
+
+				--prepare the body
+					body = body:gsub("${caller_id_name}", caller_id_name);
+					body = body:gsub("${caller_id_number}", caller_id_number);
+					body = body:gsub("${ring_group_name}", ring_group_name);
+					body = body:gsub("${ring_group_extension}", ring_group_extension);
+					body = body:gsub("${sip_to_user}", ring_group_name);
+					body = body:gsub("${dialed_user}", ring_group_extension);
+					body = body:gsub("${destination_number}", destination_number);
+					body = body:gsub(" ", "&nbsp;");
+					body = body:gsub("%s+", "");
+					body = body:gsub("&nbsp;", " ");
+					body = body:gsub("\n", "");
+					body = body:gsub("\n", "");
+					body = trim(body);
+
+				--send the email
+					send_mail(headers,
+						nil,
+						mail_to,
+						{subject, body}
+					);
+
+				--send the debug info
+					if (debug["info"]) then
+						freeswitch.consoleLog("notice", "[missed call]: "..mail_to.." '"..subject.."' '"..body.."'\n");
+					end
+			end
+		end
+	end
+
 --define iterator function to iterate over key/value pairs in string
 	local function split_vars_pairs(str)
 		local last_pos = 1
@@ -153,6 +250,8 @@
 	if (session:ready()) then
 		session:setAutoHangup(false);
 		ring_group_uuid = session:getVariable("ring_group_uuid");
+		domain_uuid = session:getVariable("domain_uuid");
+		domain_name = session:getVariable("domain_name");
 		recordings_dir = session:getVariable("recordings_dir");
 		sounds_dir = session:getVariable("sounds_dir");
 		username = session:getVariable("username");
@@ -334,7 +433,7 @@
 		end
 
 		--use the user defined or default exit key
-		session:execute("bind_digit_action", "exit_key,"..ring_group_exit_key..",exec:"..ring_group_timeout_app..","..ring_group_timeout_data..",both,self");
+		session:execute("bind_digit_action", "local,"..ring_group_exit_key..",exec:"..ring_group_timeout_app..","..ring_group_timeout_data..",both,self");
 	end
 
 --play the greeting
@@ -455,103 +554,6 @@
 		end
 		if (ring_group_cid_number_prefix ~= nil and string.len(ring_group_cid_number_prefix) > 0) then
 			session:execute("export", "effective_caller_id_number="..ring_group_cid_number_prefix..caller_id_number);
-		end
-	end
-
---check the missed calls
-	function missed()
-		--add missed call channel variable
-			if (session) then
-				session:setVariable("missed_call", 'true');
-			end
-
-		--send missed call email
-		if (missed_call_app ~= nil and missed_call_data ~= nil) then
-			if (missed_call_app == "email") then
-				--prepare the email address
-					mail_to = missed_call_data;
-
-				--set the sounds path for the language, dialect and voice
-					default_language = session:getVariable("default_language");
-					default_dialect = session:getVariable("default_dialect");
-					default_voice = session:getVariable("default_voice");
-					if (not default_language) then default_language = 'en'; end
-					if (not default_dialect) then default_dialect = 'us'; end
-					if (not default_voice) then default_voice = 'callie'; end
-
-				--predefine the variables
-					subject = '';
-					body = '';
-
-				--get the templates
-					local sql = "SELECT * FROM v_email_templates ";
-					sql = sql .. "WHERE (domain_uuid = :domain_uuid or domain_uuid is null) ";
-					sql = sql .. "AND template_language = :template_language ";
-					sql = sql .. "AND template_category = 'missed' ";
-					sql = sql .. "AND template_enabled = true ";
-					sql = sql .. "ORDER BY domain_uuid DESC ";
-					local params = {domain_uuid = domain_uuid, template_language = default_language.."-"..default_dialect};
-					if (debug["sql"]) then
-						freeswitch.consoleLog("notice", "[voicemail] SQL: " .. sql .. "; params:" .. json.encode(params) .. "\n");
-					end
-					dbh = Database.new('system');
-					dbh:query(sql, params, function(row)
-						subject = row["template_subject"];
-						body = row["template_body"];
-					end);
-
-				--prepare the headers
-					local headers = {
-						["X-FusionPBX-Domain-UUID"] = domain_uuid;
-						["X-FusionPBX-Domain-Name"] = domain_name;
-						["X-FusionPBX-Call-UUID"]   = uuid;
-						["X-FusionPBX-Email-Type"]  = 'missed';
-					}
-
-				--remove quotes from caller id name and number
-					caller_id_name = caller_id_name:gsub("'", "&#39;");
-					caller_id_name = caller_id_name:gsub([["]], "&#34;");
-					caller_id_number = caller_id_number:gsub("'", "&#39;");
-					caller_id_number = caller_id_number:gsub([["]], "&#34;");
-
-				--prepare the subject
-					subject = subject:gsub("${caller_id_name}", caller_id_name);
-					subject = subject:gsub("${caller_id_number}", caller_id_number);
-					subject = subject:gsub("${ring_group_name}", ring_group_name);
-					subject = subject:gsub("${ring_group_extension}", ring_group_extension);
-					subject = subject:gsub("${sip_to_user}", ring_group_name);
-					subject = subject:gsub("${dialed_user}", ring_group_extension);
-					subject = subject:gsub("${destination_number}", destination_number);
-					subject = trim(subject);
-					subject = '=?utf-8?B?'..base64.encode(subject)..'?=';
-
-				--prepare the body
-					body = body:gsub("${caller_id_name}", caller_id_name);
-					body = body:gsub("${caller_id_number}", caller_id_number);
-					body = body:gsub("${ring_group_name}", ring_group_name);
-					body = body:gsub("${ring_group_extension}", ring_group_extension);
-					body = body:gsub("${sip_to_user}", ring_group_name);
-					body = body:gsub("${dialed_user}", ring_group_extension);
-					body = body:gsub("${destination_number}", destination_number);
-					body = body:gsub(" ", "&nbsp;");
-					body = body:gsub("%s+", "");
-					body = body:gsub("&nbsp;", " ");
-					body = body:gsub("\n", "");
-					body = body:gsub("\n", "");
-					body = trim(body);
-
-				--send the email
-					send_mail(headers,
-						nil,
-						mail_to,
-						{subject, body}
-					);
-
-				--send the debug info
-					if (debug["info"]) then
-						freeswitch.consoleLog("notice", "[missed call]: "..mail_to.." '"..subject.."' '"..body.."'\n");
-					end
-			end
 		end
 	end
 
@@ -1246,7 +1248,6 @@
 					for _, str in ipairs(bindings) do
 						session:execute("bind_digit_action", str .. "," .. bind_target)
 					end
-					session:execute("digit_action_set_realm", "local");
 
 				--if the user is busy rollover to the next destination
 					if (ring_group_strategy == "rollover") then
