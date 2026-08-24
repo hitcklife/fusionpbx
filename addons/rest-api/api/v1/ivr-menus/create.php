@@ -119,6 +119,7 @@ $database = new database;
 $database->app_name = 'ivr_menus';
 $database->app_uuid = 'a5788e9b-58bc-bd1b-df59-fff5d51253ab';
 $database->save($array);
+api_require_saved($database);
 unset($array);
 
 $p->delete('ivr_menu_add', 'temp');
@@ -150,6 +151,7 @@ if (!empty($request['options']) && is_array($request['options'])) {
     $database->app_name = 'ivr_menus';
     $database->app_uuid = 'a5788e9b-58bc-bd1b-df59-fff5d51253ab';
     $database->save($array);
+    api_require_saved($database);
     unset($array);
 
     $p->delete('ivr_menu_option_add', 'temp');

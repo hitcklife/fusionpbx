@@ -16,7 +16,7 @@ if (!$agent) {
 $database = new database;
 $sql = "SELECT t.call_center_tier_uuid, t.tier_level, t.tier_position,
         q.call_center_queue_uuid, q.queue_name, q.queue_extension,
-        q.queue_strategy, q.queue_enabled
+        q.queue_strategy
         FROM v_call_center_tiers t
         INNER JOIN v_call_center_queues q ON t.call_center_queue_uuid = q.call_center_queue_uuid
         WHERE t.call_center_agent_uuid = :agent_uuid

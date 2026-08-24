@@ -59,7 +59,6 @@ $array['call_center_queues'][0]['queue_abandoned_resume_allowed'] = $data['queue
 $array['call_center_queues'][0]['queue_announce_sound'] = $data['queue_announce_sound'] ?? null;
 $array['call_center_queues'][0]['queue_announce_frequency'] = $data['queue_announce_frequency'] ?? 0;
 $array['call_center_queues'][0]['queue_description'] = $queue_description;
-$array['call_center_queues'][0]['queue_enabled'] = $data['queue_enabled'] ?? 'true';
 $array['call_center_queues'][0]['queue_language'] = $queue_language;
 $array['call_center_queues'][0]['queue_dialect'] = $queue_dialect;
 $array['call_center_queues'][0]['queue_voice'] = $queue_voice;
@@ -105,6 +104,7 @@ $p->add('dialplan_add', 'temp');
 $database->app_name = 'call_centers';
 $database->app_uuid = $app_uuid;
 $database->save($array);
+api_require_saved($database);
 
 $p->delete('call_center_queue_add', 'temp');
 $p->delete('dialplan_add', 'temp');

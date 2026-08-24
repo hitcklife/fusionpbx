@@ -139,6 +139,7 @@ $database = new database;
 $database->app_name = 'destinations';
 $database->app_uuid = '5ec89622-b19c-3559-64f0-afde802ab139';
 $database->save($array);
+api_require_saved($database);
 
 // Revoke temporary permissions
 $p->delete('destination_add', 'temp');

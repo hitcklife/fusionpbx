@@ -467,5 +467,22 @@ function api_generate_dialplan_xml($dialplan_uuid) {
     $p->delete('dialplan_edit', 'temp');
 }
 
+/**
+ * Fail the request if FusionPBX database->save did not persist.
+ *
+ * REST used to return 201 after save() even when Postgres rejected a
+ * phantom column (queue_enabled). Call this immediately after save().
+ *
+ * @param database $database
+ */
+function api_require_saved($database) {
+    $code = (string)($database->message['code'] ?? '');
+    if ($code === '200' || $code === '000') {
+        return;
+    }
+    $detail = $database->message['details'][0]['message'] ?? ($database->message['message'] ?? 'Database save failed');
+    api_error('SAVE_FAILED', $detail, null, 500);
+}
+
 // Auto-authenticate when base.php is loaded
 validate_api_key();

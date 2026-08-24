@@ -72,7 +72,7 @@ $allowed_fields = [
     'queue_tier_rule_wait_second', 'queue_tier_rule_wait_multiply_level',
     'queue_tier_rule_no_agent_no_wait', 'queue_discard_abandoned_after',
     'queue_abandoned_resume_allowed', 'queue_announce_sound', 'queue_announce_frequency',
-    'queue_description', 'queue_enabled', 'queue_cid_prefix', 'queue_cc_exit_keys',
+    'queue_description', 'queue_cid_prefix', 'queue_cc_exit_keys',
     'queue_greeting', 'queue_limit', 'queue_time_base_score_sec',
 ];
 foreach ($allowed_fields as $field) {
@@ -122,6 +122,7 @@ if ($dialplan_is_new) {
 $database->app_name = 'call_centers';
 $database->app_uuid = $app_uuid;
 $database->save($array);
+api_require_saved($database);
 
 $p->delete('call_center_queue_edit', 'temp');
 $p->delete('dialplan_edit', 'temp');

@@ -80,6 +80,7 @@ $database = new database;
 $database->app_name = 'ring_groups';
 $database->app_uuid = $app_uuid;
 $database->save($array);
+api_require_saved($database);
 
 $p->delete('ring_group_add', 'temp');
 $p->delete('ring_group_destination_add', 'temp');
