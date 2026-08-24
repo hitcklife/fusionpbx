@@ -127,17 +127,20 @@ $p->delete('dialplan_add', 'temp');
 // Add options if provided
 if (!empty($request['options']) && is_array($request['options'])) {
     foreach ($request['options'] as $index => $opt) {
-        if (!isset($opt['ivr_menu_option_digits'])) continue;
+        $opt_norm = api_normalize_ivr_option($opt, $domain_name);
+        if ($opt_norm['digits'] === null || $opt_norm['digits'] === '') {
+            continue;
+        }
 
         $array['ivr_menu_options'][$index]['ivr_menu_option_uuid'] = uuid();
         $array['ivr_menu_options'][$index]['domain_uuid'] = $domain_uuid;
         $array['ivr_menu_options'][$index]['ivr_menu_uuid'] = $ivr_menu_uuid;
-        $array['ivr_menu_options'][$index]['ivr_menu_option_digits'] = $opt['ivr_menu_option_digits'];
-        $array['ivr_menu_options'][$index]['ivr_menu_option_action'] = $opt['ivr_menu_option_action'] ?? 'menu-exec-app';
-        $array['ivr_menu_options'][$index]['ivr_menu_option_param'] = $opt['ivr_menu_option_param'] ?? '';
-        $array['ivr_menu_options'][$index]['ivr_menu_option_order'] = $opt['ivr_menu_option_order'] ?? (($index + 1) * 10);
-        $array['ivr_menu_options'][$index]['ivr_menu_option_enabled'] = $opt['ivr_menu_option_enabled'] ?? 'true';
-        $array['ivr_menu_options'][$index]['ivr_menu_option_description'] = $opt['ivr_menu_option_description'] ?? '';
+        $array['ivr_menu_options'][$index]['ivr_menu_option_digits'] = $opt_norm['digits'];
+        $array['ivr_menu_options'][$index]['ivr_menu_option_action'] = $opt_norm['action'];
+        $array['ivr_menu_options'][$index]['ivr_menu_option_param'] = $opt_norm['param'];
+        $array['ivr_menu_options'][$index]['ivr_menu_option_order'] = $opt_norm['order'] ?? (($index + 1) * 10);
+        $array['ivr_menu_options'][$index]['ivr_menu_option_enabled'] = $opt_norm['enabled'];
+        $array['ivr_menu_options'][$index]['ivr_menu_option_description'] = $opt_norm['description'];
     }
 
     $p = permissions::new();

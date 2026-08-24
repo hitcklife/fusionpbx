@@ -168,6 +168,129 @@ function api_clear_dialplan_cache($context = null) {
 }
 
 /**
+ * XML-escape a value the same way native FusionPBX apps do.
+ */
+function api_xml_esc($value) {
+    if (class_exists('xml') && method_exists('xml', 'sanitize')) {
+        return xml::sanitize($value);
+    }
+    return htmlspecialchars((string)($value ?? ''), ENT_XML1 | ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Native IVR option conversion: a numeric param is transfer {ext} XML {context}.
+ *
+ * @param array $opt
+ * @param string $context Domain/context name
+ * @return array{digits:mixed,action:string,param:string,order:mixed,enabled:string,description:string}
+ */
+function api_normalize_ivr_option($opt, $context) {
+    $digits = $opt['ivr_menu_option_digits'] ?? $opt['digit'] ?? null;
+    $param = $opt['ivr_menu_option_param'] ?? $opt['destination'] ?? '';
+    $action = $opt['ivr_menu_option_action'] ?? $opt['action'] ?? 'menu-exec-app';
+    if (isset($param) && $param !== '' && is_numeric($param)) {
+        $action = 'menu-exec-app';
+        $param = 'transfer ' . $param . ' XML ' . $context;
+    }
+    return [
+        'digits' => $digits,
+        'action' => $action,
+        'param' => $param,
+        'order' => $opt['ivr_menu_option_order'] ?? $opt['order'] ?? null,
+        'enabled' => $opt['ivr_menu_option_enabled'] ?? $opt['enabled'] ?? 'true',
+        'description' => $opt['ivr_menu_option_description'] ?? $opt['description'] ?? '',
+    ];
+}
+
+/**
+ * Ring-group dialplan XML matching app/ring_groups/ring_group_edit.php
+ */
+function api_ring_group_dialplan_xml($name, $extension, $dialplan_uuid, $ring_group_uuid) {
+    $xml = "<extension name=\"".api_xml_esc($name)."\" continue=\"\" uuid=\"".api_xml_esc($dialplan_uuid)."\">\n";
+    $xml .= "	<condition field=\"destination_number\" expression=\"^".api_xml_esc($extension)."$\">\n";
+    $xml .= "		<action application=\"ring_ready\" data=\"\"/>\n";
+    $xml .= "		<action application=\"set\" data=\"ring_group_uuid=".api_xml_esc($ring_group_uuid)."\"/>\n";
+    $xml .= "		<action application=\"set\" data=\"record_stereo=true\"/>\n";
+    $xml .= "		<action application=\"lua\" data=\"app.lua ring_groups\"/>\n";
+    $xml .= "	</condition>\n";
+    $xml .= "</extension>\n";
+    return $xml;
+}
+
+/**
+ * Call-center queue dialplan XML matching app/call_centers/call_center_queue_edit.php
+ *
+ * @param array $q name, extension, dialplan_uuid, queue_uuid, domain_name, language, dialect, voice, limit, greeting, cid_prefix, exit_keys, timeout_app, timeout_data, time_base_score_sec
+ */
+function api_call_center_queue_dialplan_xml(array $q) {
+    $name = $q['name'];
+    $extension = $q['extension'];
+    $dialplan_uuid = $q['dialplan_uuid'];
+    $queue_uuid = $q['queue_uuid'];
+    $domain_name = $q['domain_name'];
+    $language = $q['language'] ?? 'en';
+    $dialect = $q['dialect'] ?? 'us';
+    $voice = $q['voice'] ?? 'callie';
+    $sounds = '';
+    if (class_exists('settings')) {
+        $settings = new settings();
+        $sounds = $settings->get('switch', 'sounds', '');
+    }
+
+    $xml = "<extension name=\"".api_xml_esc($name)."\" continue=\"\" uuid=\"".api_xml_esc($dialplan_uuid)."\">\n";
+    if (!empty($q['limit'])) {
+        $xml .= "	<condition field=\"destination_number\" expression=\"^(callcenter\+)?".api_xml_esc($extension)."$\" break=\"on-false\">\n";
+        $xml .= "		<action application=\"limit\" data=\"hash inbound \${destination_number} ".api_xml_esc($q['limit'])." !NORMAL_CIRCUIT_CONGESTION\"/>\n";
+        $xml .= "	</condition>\n";
+    }
+    $xml .= "	<condition field=\"destination_number\" expression=\"^([^#]+#)(.*)\$\" break=\"never\">\n";
+    $xml .= "		<action application=\"set\" data=\"caller_id_name=\$2\"/>\n";
+    $xml .= "	</condition>\n";
+    $xml .= "	<condition field=\"destination_number\" expression=\"^(callcenter\+)?".api_xml_esc($extension)."$\">\n";
+    $xml .= "		<action application=\"answer\" data=\"\"/>\n";
+    $xml .= "		<action application=\"set\" data=\"sound_prefix=".api_xml_esc($sounds).'/'.api_xml_esc($language).'/'.api_xml_esc($dialect).'/'.api_xml_esc($voice)."\"/>\n";
+    if (!empty($queue_uuid)) {
+        $xml .= "		<action application=\"set\" data=\"call_center_queue_uuid=".api_xml_esc($queue_uuid)."\"/>\n";
+    }
+    if (!empty($extension) && is_numeric($extension)) {
+        $xml .= "		<action application=\"set\" data=\"queue_extension=".api_xml_esc($extension)."\"/>\n";
+    }
+    $xml .= "		<action application=\"set\" data=\"cc_export_vars=\${cc_export_vars},call_center_queue_uuid,sip_h_Alert-Info,sound_prefix\"/>\n";
+    $xml .= "		<action application=\"set\" data=\"hangup_after_bridge=true\"/>\n";
+    if (!empty($q['time_base_score_sec'])) {
+        $xml .= "		<action application=\"set\" data=\"cc_base_score=".api_xml_esc($q['time_base_score_sec'])."\"/>\n";
+    }
+    if (!empty($q['greeting'])) {
+        $xml .= "		<action application=\"sleep\" data=\"1000\"/>\n";
+        $greeting_array = explode(':', $q['greeting']);
+        if (count($greeting_array) == 1) {
+            $xml .= "		<action application=\"playback\" data=\"".api_xml_esc($q['greeting'])."\"/>\n";
+        } elseif (in_array($greeting_array[0], ['say', 'tone_stream', 'phrase'], true)) {
+            $xml .= "		<action application=\"".api_xml_esc($greeting_array[0])."\" data=\"".api_xml_esc($greeting_array[1] ?? '')."\"/>\n";
+        }
+    }
+    if (!empty($q['cid_prefix'])) {
+        $xml .= "		<action application=\"set\" data=\"effective_caller_id_name=".api_xml_esc($q['cid_prefix'])."#\${caller_id_name}\"/>\n";
+    }
+    if (isset($q['exit_keys']) && $q['exit_keys'] !== null && $q['exit_keys'] !== '') {
+        $xml .= "		<action application=\"set\" data=\"cc_exit_keys=".api_xml_esc($q['exit_keys'])."\"/>\n";
+    }
+    $xml .= "		<action application=\"callcenter\" data=\"".api_xml_esc($extension)."@".api_xml_esc($domain_name)."\"/>\n";
+    if (!empty($q['timeout_app'])) {
+        $xml .= "		<action application=\"".api_xml_esc($q['timeout_app'])."\" data=\"".api_xml_esc($q['timeout_data'] ?? '')."\"/>\n";
+    }
+    $xml .= "	</condition>\n";
+    $xml .= "</extension>\n";
+    return $xml;
+}
+
+function api_reloadxml() {
+    if (class_exists('event_socket')) {
+        event_socket::api('reloadxml');
+    }
+}
+
+/**
  * Log API action for audit trail
  *
  * @param string $action Action performed

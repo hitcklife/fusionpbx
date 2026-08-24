@@ -77,7 +77,7 @@ if (isset($request['destination_order'])) {
     $array['destinations'][0]['destination_order'] = $request['destination_order'];
     $destination_order = $request['destination_order'];
 } else {
-    $destination_order = $existing['destination_order'] ?? '100';
+    $destination_order = $existing['destination_order'] ?? (($existing['destination_type'] ?? '') === 'inbound' ? '25' : '200');
 }
 
 $destination_type = $existing['destination_type'];

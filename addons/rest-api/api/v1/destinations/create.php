@@ -63,7 +63,8 @@ $array['destinations'][0]['destination_prefix'] = $destination_prefix;
 $array['destinations'][0]['destination_context'] = $request['destination_context'];
 $array['destinations'][0]['destination_enabled'] = $destination_enabled;
 $array['destinations'][0]['destination_description'] = $request['destination_description'] ?? '';
-$array['destinations'][0]['destination_order'] = $request['destination_order'] ?? '100';
+$default_order = ($destination_type === 'inbound') ? '25' : '200';
+$array['destinations'][0]['destination_order'] = $request['destination_order'] ?? $default_order;
 
 // Build dialplan array
 $dialplan_name = !empty($request['dialplan_name']) ? $request['dialplan_name'] : format_phone($request['destination_number']);
@@ -76,7 +77,7 @@ $array['dialplans'][0]['dialplan_name'] = $dialplan_name;
 $array['dialplans'][0]['dialplan_number'] = $request['destination_number'];
 $array['dialplans'][0]['dialplan_context'] = $request['destination_context'];
 $array['dialplans'][0]['dialplan_continue'] = 'false';
-$array['dialplans'][0]['dialplan_order'] = $request['destination_order'] ?? '100';
+$array['dialplans'][0]['dialplan_order'] = $request['destination_order'] ?? $default_order;
 $array['dialplans'][0]['dialplan_enabled'] = $destination_enabled;
 $array['dialplans'][0]['dialplan_description'] = $request['destination_description'] ?? '';
 
